@@ -3,7 +3,6 @@ import { useMemo, useState, lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { Building2, MapPin, Sparkles, Heart } from "lucide-react";
 import { ChatPanel } from "@/components/ChatPanel";
-import { FiltersPanel } from "@/components/FiltersPanel";
 import { PropertyCard } from "@/components/PropertyCard";
 import { filterProperties, type Filters } from "@/lib/filterProperties";
 
@@ -106,29 +105,24 @@ function Index() {
               </div>
             </div>
 
-            {/* Filters + cards */}
-            <div className="grid gap-6 md:grid-cols-[240px_1fr]">
-              <div className="md:sticky md:top-24 md:self-start">
-                <FiltersPanel filters={filters} onChange={setFilters} />
-              </div>
-
-              <div>
+            {/* Cards */}
+            <div>
                 <div className="mb-3 flex items-baseline justify-between">
                   <h2 className="font-serif text-xl font-semibold">Recommended for you</h2>
                   <span className="text-xs text-muted-foreground">{results.length} matches</span>
                 </div>
                 {results.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
-                    <p className="text-sm text-muted-foreground">No properties match these filters yet.</p>
+                    <p className="text-sm text-muted-foreground">No properties match yet. Try refining your request in the chat.</p>
                     <button
                       onClick={() => setFilters({ listingType: "Any", propertyType: "Any" })}
                       className="mt-3 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
                     >
-                      Reset filters
+                      Reset
                     </button>
                   </div>
                 ) : (
-                  <div className="grid gap-5 sm:grid-cols-2">
+                  <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                     {results.map(p => (
                       <PropertyCard
                         key={p.id}
@@ -141,7 +135,6 @@ function Index() {
                     ))}
                   </div>
                 )}
-              </div>
             </div>
           </div>
         </div>
