@@ -19,7 +19,7 @@ const FiltersSchema = z.object({
 });
 export type SearchFilters = z.infer<typeof FiltersSchema>;
 
-function applyFilters(query: ReturnType<typeof supabaseAdmin.from<"properties", any>>["select"] extends infer _ ? any : any, f: SearchFilters) {
+function applyFilters(query: any, f: SearchFilters) {
   let q = query;
   if (f.area) q = q.ilike("area_name", `%${f.area}%`);
   if (f.propertyType && f.propertyType !== "Any") q = q.eq("property_type", f.propertyType);
