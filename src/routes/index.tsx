@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
-import { Building2, MapPin, Sparkles, Heart } from "lucide-react";
+import { Building2, MapPin, Sparkles, Heart, X } from "lucide-react";
 import { ChatPanel } from "@/components/ChatPanel";
 import { PropertyCard } from "@/components/PropertyCard";
 import { filterProperties, type Filters } from "@/lib/filterProperties";
@@ -26,6 +26,16 @@ function Index() {
   const [focusedId, setFocusedId] = useState<string | null>(null);
 
   const results = useMemo(() => filterProperties(filters), [filters]);
+
+  const activeFilterChips: { label: string; clear: () => void }[] = [];
+  if (filters.area) activeFilterChips.push({ label: `Area: ${filters.area}`, clear: () => setFilters({ ...filters, area: undefined }) });
+  if (filters.propertyType && filters.propertyType !== "Any") activeFilterChips.push({ label: filters.propertyType, clear: () => setFilters({ ...filters, propertyType: "Any" }) });
+  if (filters.listingType && filters.listingType !== "Any") activeFilterChips.push({ label: `For ${filters.listingType}`, clear: () => setFilters({ ...filters, listingType: "Any" }) });
+  if (filters.bedrooms != null) activeFilterChips.push({ label: filters.bedrooms === 0 ? "Studio" : `${filters.bedrooms}+ bed`, clear: () => setFilters({ ...filters, bedrooms: undefined }) });
+  if (filters.maxPrice != null) activeFilterChips.push({ label: `≤ ฿${filters.maxPrice.toLocaleString()}`, clear: () => setFilters({ ...filters, maxPrice: undefined }) });
+  if (filters.nearTransit) activeFilterChips.push({ label: "Near BTS/MRT", clear: () => setFilters({ ...filters, nearTransit: false }) });
+  if (filters.nearUniversity) activeFilterChips.push({ label: "Near University", clear: () => setFilters({ ...filters, nearUniversity: false }) });
+  if (filters.nearMall) activeFilterChips.push({ label: "Near Mall", clear: () => setFilters({ ...filters, nearMall: false }) });
 
   const toggleFavorite = (id: string) =>
     setFavorites(prev => {
@@ -81,14 +91,9 @@ function Index() {
 
       {/* Main grid */}
       <main className="mx-auto max-w-[1600px] px-4 py-6 md:px-6 md:py-8">
-        <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
-          {/* Left: chat */}
-          <div className="lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)]">
-            <ChatPanel filters={filters} onFiltersChange={setFilters} />
-          </div>
-
-          {/* Right: results */}
-          <div className="space-y-6">
+        <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
+          {/* Left: results */}
+          <div className="space-y-6 order-2 lg:order-1">
             {/* Map */}
             <div className="overflow-hidden rounded-2xl border border-border bg-card" style={{ boxShadow: "var(--shadow-card)" }}>
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -97,13 +102,39 @@ function Index() {
                   <span className="text-sm font-medium">Live Map</span>
                   <span className="text-xs text-muted-foreground">· {results.length} properties</span>
                 </div>
+                {filters.area && (
+                  <span className="text-xs font-medium text-destructive">Highlighting {filters.area}</span>
+                )}
               </div>
               <div className="h-[340px] w-full">
                 <Suspense fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground">Loading map…</div>}>
-                  <PropertyMap properties={results} focusedId={focusedId} onSelect={setFocusedId} />
+                  <PropertyMap properties={results} focusedId={focusedId} highlightArea={filters.area ?? null} onSelect={setFocusedId} />
                 </Suspense>
               </div>
             </div>
+
+            {/* Active filters from chat */}
+            {activeFilterChips.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-3">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Active filters</span>
+                {activeFilterChips.map((c) => (
+                  <button
+                    key={c.label}
+                    onClick={c.clear}
+                    className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-xs font-medium hover:bg-secondary/70"
+                  >
+                    {c.label}
+                    <X className="h-3 w-3" />
+                  </button>
+                ))}
+                <button
+                  onClick={() => setFilters({ listingType: "Any", propertyType: "Any" })}
+                  className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
 
             {/* Cards */}
             <div>
@@ -136,6 +167,11 @@ function Index() {
                   </div>
                 )}
             </div>
+          </div>
+
+          {/* Right: chat */}
+          <div className="order-1 lg:order-2 lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)]">
+            <ChatPanel filters={filters} onFiltersChange={setFilters} />
           </div>
         </div>
       </main>

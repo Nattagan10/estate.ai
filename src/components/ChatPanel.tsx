@@ -149,12 +149,8 @@ export function ChatPanel({
         ))}
         {busy && messages[messages.length - 1]?.content === "" && (
           <div className="flex justify-start">
-            <div className="rounded-2xl bg-secondary px-4 py-3">
-              <div className="flex gap-1">
-                <span className="dot h-2 w-2 rounded-full bg-muted-foreground" style={{ animationDelay: "0s" }} />
-                <span className="dot h-2 w-2 rounded-full bg-muted-foreground" style={{ animationDelay: "0.2s" }} />
-                <span className="dot h-2 w-2 rounded-full bg-muted-foreground" style={{ animationDelay: "0.4s" }} />
-              </div>
+            <div className="rounded-2xl rounded-bl-sm bg-secondary px-4 py-2.5 text-sm italic text-muted-foreground">
+              typing<span className="typing-ellipsis" />
             </div>
           </div>
         )}
