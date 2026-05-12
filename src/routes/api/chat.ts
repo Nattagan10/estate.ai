@@ -148,7 +148,7 @@ export const Route = createFileRoute("/api/chat")({
             if (JSON.stringify(customerProfile) !== JSON.stringify(prevProfile)) {
               await supabaseAdmin
                 .from("chat_sessions")
-                .update({ questionnaire: customerProfile })
+                .update({ questionnaire: customerProfile as any })
                 .eq("id", sessionId);
             }
           }
