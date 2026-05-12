@@ -29,7 +29,7 @@ function AdminPage() {
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-xl text-primary-foreground" style={{ background: "var(--gradient-hero)" }}>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground">
               <Building2 className="h-4 w-4" />
             </div>
             <div>
