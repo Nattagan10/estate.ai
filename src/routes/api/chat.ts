@@ -8,17 +8,31 @@ Language:
 - Detect the user's language (Thai, English, Chinese, Japanese...) and reply in that language. Mirror language switches.
 
 Style:
-- Warm, conversational, brief (2-4 short sentences).
-- Ask ONE clarifying question at a time.
+- Warm, conversational, brief (2-3 short sentences).
+- Ask ONLY ONE question per turn — never stack questions. Avoid making the customer feel interrogated.
 - Use markdown sparingly (bold for key points).
 
+Information to collect naturally over the conversation (one at a time, in a friendly order):
+1. budget
+2. preferred location / area
+3. customer_name
+4. customer_phone
+5. purpose (own / invest / rent out / live)
+6. age
+7. occupation
+8. payment_type (cash / mortgage / installment)
+
+IMPORTANT — Do NOT ask the customer about property_type (house vs condo).
+Instead, analyze their budget and proactively recommend BOTH houses and condos that fit, unless they explicitly say they prefer one.
+
 Behavior:
-- Greet only on the first turn.
-- Acknowledge what we learned from the user (area, budget, type, bedrooms, transit/lifestyle preferences).
-- The system will pre-filter the property database for you. The CONTEXT block lists the strictly filtered subset (out of 500 Bangkok listings). Refer to those listings only — never invent property names. Say things like "the matches on the right".
-- Always nudge the user toward narrowing down further (budget, bedrooms, commute, lifestyle) until you have enough criteria.
-- If filtered count is small (< 6), summarize what fits and offer next steps (book viewing, save favorites).
-- If filtered count is 0, gently suggest relaxing one criterion.`;
+- Greet only on the first turn, then ask the first missing piece of info.
+- Acknowledge each new detail the customer shares before asking the next question.
+- The system pre-filters the property database for you. The CONTEXT block lists the strictly filtered subset (out of 500 Bangkok listings). Refer ONLY to those listings — never invent property names, prices or details. Provide info strictly based on the database CONTEXT.
+- If the customer seems uncertain, compare 2 options in plain language (e.g. larger living space & value vs. central location & convenience).
+- When the customer shows interest in a project, naturally suggest scheduling a project visit / appointment.
+- Proactively offer to send brochure or price list if they're interested.
+- If filtered count is 0, gently suggest relaxing one criterion (budget, area).`;
 
 type Msg = { role: "user" | "assistant"; content: string };
 type ReqBody = { messages: Msg[]; filters?: SearchFilters; sessionId?: string | null };
@@ -70,6 +84,40 @@ async function extractFilters(messages: Msg[], prev: SearchFilters): Promise<Sea
   }
 }
 
+const CUSTOMER_EXTRACTOR_PROMPT = `Extract any customer profile fields the user just shared.
+Return ONLY a compact JSON object (no prose, no fences) with any of these keys when present:
+- customer_name: string
+- customer_phone: string
+- age: number
+- occupation: string
+- purpose: string (own/invest/rent out/live)
+- payment_type: string (cash/mortgage/installment)
+- budget: number (THB)
+- location: string
+Merge with previous profile and KEEP previous values when not changed: __PREV__
+If nothing new, return {}. JSON only.`;
+
+async function extractCustomer(messages: Msg[], prev: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  if (!lastUser) return prev;
+  const sys = CUSTOMER_EXTRACTOR_PROMPT.replace("__PREV__", JSON.stringify(prev ?? {}));
+  const r = await callLovable("google/gemini-2.5-flash-lite", [
+    { role: "system", content: sys },
+    { role: "user", content: lastUser.content },
+  ]);
+  if (!r.ok) return prev;
+  const j = await r.json();
+  const text: string = j.choices?.[0]?.message?.content ?? "";
+  const m = text.match(/\{[\s\S]*\}/);
+  if (!m) return prev;
+  try {
+    const parsed = JSON.parse(m[0]);
+    return { ...prev, ...parsed };
+  } catch {
+    return prev;
+  }
+}
+
 function summarizeProperty(p: any) {
   return `- ${p.name} | ${p.area_name} | ${p.propertyType} ${p.bedrooms}bd | ฿${p.price.toLocaleString()}${p.listingType === "rent" ? "/mo" : ""} | ${p.availability}`;
 }
@@ -86,6 +134,24 @@ export const Route = createFileRoute("/api/chat")({
 
           // 1. Extract filters from latest user turn (MCP-style progressive narrowing)
           const newFilters = await extractFilters(messages, prevFilters);
+
+          // 1b. Extract customer profile + persist to chat_sessions.questionnaire
+          let customerProfile: Record<string, unknown> = {};
+          if (sessionId) {
+            const { data: sess } = await supabaseAdmin
+              .from("chat_sessions")
+              .select("questionnaire")
+              .eq("id", sessionId)
+              .maybeSingle();
+            const prevProfile = (sess?.questionnaire ?? {}) as Record<string, unknown>;
+            customerProfile = await extractCustomer(messages, prevProfile);
+            if (JSON.stringify(customerProfile) !== JSON.stringify(prevProfile)) {
+              await supabaseAdmin
+                .from("chat_sessions")
+                .update({ questionnaire: customerProfile as any })
+                .eq("id", sessionId);
+            }
+          }
 
           // 2. Query DB with new filters — only filtered subset enters LLM context
           const { properties, total } = await searchPropertiesServer({ ...newFilters, limit: 12 });
@@ -105,7 +171,10 @@ export const Route = createFileRoute("/api/chat")({
             properties.length === 0
               ? "(no matching properties yet)"
               : properties.map(summarizeProperty).join("\n");
-          const contextNote = `\n\nCONTEXT (top ${properties.length} of ${total} matches after filtering):\n${ctx}\nCURRENT FILTERS: ${JSON.stringify(newFilters)}`;
+          const knownProfile = Object.keys(customerProfile).length
+            ? `\nCUSTOMER PROFILE SO FAR: ${JSON.stringify(customerProfile)}\nDo not re-ask fields already filled. Ask ONLY the next missing field from: budget, location, customer_name, customer_phone, purpose, age, occupation, payment_type.`
+            : "";
+          const contextNote = `\n\nCONTEXT (top ${properties.length} of ${total} matches after filtering):\n${ctx}\nCURRENT FILTERS: ${JSON.stringify(newFilters)}${knownProfile}`;
 
           const fullMessages = [
             { role: "system", content: SYSTEM_PROMPT + contextNote },
@@ -127,12 +196,35 @@ export const Route = createFileRoute("/api/chat")({
               const enc = new TextEncoder();
               controller.enqueue(enc.encode(filtersEvent));
               const reader = upstream.getReader();
+              const dec = new TextDecoder();
+              let assistantText = "";
+              let buf = "";
               while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
                 controller.enqueue(value);
+                buf += dec.decode(value, { stream: true });
+                let nl: number;
+                while ((nl = buf.indexOf("\n")) !== -1) {
+                  const line = buf.slice(0, nl).trim();
+                  buf = buf.slice(nl + 1);
+                  if (!line.startsWith("data: ")) continue;
+                  const payload = line.slice(6).trim();
+                  if (payload === "[DONE]") continue;
+                  try {
+                    const parsed = JSON.parse(payload);
+                    const c = parsed.choices?.[0]?.delta?.content as string | undefined;
+                    if (c) assistantText += c;
+                  } catch { /* noop */ }
+                }
               }
               controller.close();
+              if (sessionId && assistantText.trim()) {
+                supabaseAdmin
+                  .from("chat_logs")
+                  .insert({ session_id: sessionId, role: "assistant", content: assistantText, filters_applied: newFilters as any })
+                  .then(() => undefined, () => undefined);
+              }
             },
           });
 
