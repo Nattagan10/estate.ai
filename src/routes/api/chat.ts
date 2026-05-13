@@ -171,6 +171,27 @@ export const Route = createFileRoute("/api/chat")({
           // 2. Query DB with new filters — only filtered subset enters LLM context
           const { properties, total } = await searchPropertiesServer({ ...newFilters, limit: 12 });
 
+          // 2a. If no matches, fetch alternative suggestions by progressively relaxing filters
+          let suggestions: typeof properties = [];
+          let suggestionNote = "";
+          if (properties.length === 0) {
+            const relaxOrder: Array<{ label: string; f: SearchFilters }> = [
+              { label: "same criteria, different area", f: { ...newFilters, area: undefined } },
+              { label: "wider price range, same area", f: { ...newFilters, minPrice: undefined, maxPrice: undefined } },
+              { label: "fewer bedrooms", f: { ...newFilters, bedrooms: undefined } },
+              { label: "any property type", f: { ...newFilters, propertyType: undefined } },
+              { label: "broadest match", f: { area: newFilters.area, listingType: newFilters.listingType } },
+            ];
+            for (const step of relaxOrder) {
+              const r = await searchPropertiesServer({ ...step.f, limit: 6 });
+              if (r.properties.length > 0) {
+                suggestions = r.properties;
+                suggestionNote = step.label;
+                break;
+              }
+            }
+          }
+
           // 3. Persist log (best-effort)
           if (activeSessionId) {
             const lastUser = [...messages].reverse().find((m) => m.role === "user");
@@ -184,12 +205,18 @@ export const Route = createFileRoute("/api/chat")({
 
           const ctx =
             properties.length === 0
-              ? "(no matching properties yet)"
+              ? suggestions.length > 0
+                ? `(no exact matches — showing ${suggestions.length} ALTERNATIVE suggestions: ${suggestionNote})\n${suggestions.map(summarizeProperty).join("\n")}`
+                : "(no matching properties yet)"
               : properties.map(summarizeProperty).join("\n");
           const knownProfile = Object.keys(customerProfile).length
             ? `\nCUSTOMER PROFILE SO FAR: ${JSON.stringify(customerProfile)}\nDo not re-ask fields already filled. Ask ONLY the next missing field from: budget, location, customer_name, customer_phone, purpose, age, occupation, payment_type.`
             : "";
-          const contextNote = `\n\nCONTEXT (top ${properties.length} of ${total} matches after filtering):\n${ctx}\nCURRENT FILTERS: ${JSON.stringify(newFilters)}${knownProfile}`;
+          const noResultsGuidance =
+            properties.length === 0
+              ? `\nNO EXACT MATCHES FOUND. Acknowledge this warmly, then PROACTIVELY suggest the alternative listings above by name, area and price. Mention which areas are available as alternatives and ask if the customer would like to explore them. Never say the database is empty — always offer the suggestions.`
+              : "";
+          const contextNote = `\n\nCONTEXT (top ${properties.length} of ${total} matches after filtering):\n${ctx}\nCURRENT FILTERS: ${JSON.stringify(newFilters)}${knownProfile}${noResultsGuidance}`;
 
           const fullMessages = [
             { role: "system", content: SYSTEM_PROMPT + contextNote },
