@@ -3,7 +3,7 @@ import { useMemo, useState, lazy, Suspense } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
-import { Building2, MapPin, Sparkles, Heart, X, ShieldCheck, Search, SlidersHorizontal, ChevronDown, Home, Building, Store, Trees, TrendingUp } from "lucide-react";
+import { Building2, MapPin, Sparkles, Heart, X, ShieldCheck, Search, SlidersHorizontal, ChevronDown, ChevronRight, Home, Building, Store, BellPlus, DollarSign, BedDouble, Train, GraduationCap, ShoppingBag, Tag } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { ChatPanel } from "@/components/ChatPanel";
 import { PropertyCard } from "@/components/PropertyCard";
@@ -156,30 +156,48 @@ function Index() {
       </section>
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 md:px-6 md:py-8">
-        <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 md:flex-row md:items-center" style={{ boxShadow: "var(--shadow-card)" }}>
+        <div className="mb-4 flex items-center gap-3">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={locationInput}
               onChange={(e) => setLocationInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") applyLocation(); }}
-              placeholder="Search by Location (e.g., Sukhumvit, Sathorn)"
-              className="h-11 rounded-xl border-border bg-background pl-9"
+              placeholder="Search by location"
+              className="h-12 rounded-full border-border bg-card pl-11 pr-4 text-sm shadow-sm"
             />
           </div>
+          <Button variant="outline" className="h-12 gap-2 rounded-full border-border bg-card px-5 shadow-sm">
+            <BellPlus className="h-4 w-4" /> Create alert
+          </Button>
+        </div>
+
+        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* All filters */}
+          <button
+            onClick={applyLocation}
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Filters
+            {activeFilterChips.length > 0 && (
+              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
+                {activeFilterChips.length}
+              </span>
+            )}
+          </button>
+
+          {/* Property type */}
           <Popover open={typeOpen} onOpenChange={(o) => { setTypeOpen(o); if (o) setTypeDraft(new Set(typesApplied)); }}>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="h-11 justify-between gap-2 rounded-xl md:w-[220px]">
-                <span className="truncate text-sm">
-                  {typesApplied.size === 0 ? "Property Type" : `${typesApplied.size} type${typesApplied.size > 1 ? "s" : ""} selected`}
-                </span>
-                <ChevronDown className="h-4 w-4 opacity-60" />
-              </Button>
+              <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60">
+                <Building className="h-4 w-4" />
+                {typesApplied.size === 0 ? "Property type" : `Property type · ${typesApplied.size}`}
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+              </button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-[340px] p-0">
-              <div className="border-b border-border px-4 py-3">
-                <div className="text-sm font-semibold">Select Property Types</div>
-              </div>
+            <PopoverContent align="start" className="w-[320px] p-0">
+              <div className="border-b border-border px-4 py-3 text-sm font-semibold">Property type</div>
               <div className="max-h-[280px] overflow-auto p-2">
                 {typeOptions.map(({ value, label, icon: Icon }) => {
                   const checked = typeDraft.has(value);
@@ -193,34 +211,112 @@ function Index() {
                   );
                 })}
               </div>
-              {typeDraft.size > 0 && (
-                <div className="border-t border-border px-4 py-3">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">Selected Types</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {Array.from(typeDraft).map((v) => (
-                      <button
-                        key={v}
-                        onClick={() => toggleTypeDraft(v)}
-                        className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium hover:bg-secondary/70"
-                      >
-                        {typeOptions.find((o) => o.value === v)?.label}
-                        <X className="h-3 w-3" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
               <div className="flex items-center gap-2 border-t border-border px-4 py-3">
-                <Button onClick={applyTypeFilters} className="flex-1" size="sm">
-                  Apply Filters{typeDraft.size > 0 ? ` (${typeDraft.size})` : ""}
-                </Button>
-                <Button onClick={clearTypeFilters} variant="ghost" size="sm">Clear All</Button>
+                <Button onClick={applyTypeFilters} className="flex-1" size="sm">Apply{typeDraft.size > 0 ? ` (${typeDraft.size})` : ""}</Button>
+                <Button onClick={clearTypeFilters} variant="ghost" size="sm">Clear</Button>
               </div>
             </PopoverContent>
           </Popover>
-          <Button onClick={applyLocation} className="h-11 gap-2 rounded-xl md:w-auto">
-            <SlidersHorizontal className="h-4 w-4" /> Filter
-          </Button>
+
+          {/* Price */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60">
+                <DollarSign className="h-4 w-4" />
+                {filters.maxPrice || filters.minPrice ? `฿${(filters.minPrice ?? 0).toLocaleString()} – ${filters.maxPrice ? "฿" + filters.maxPrice.toLocaleString() : "∞"}` : "Price"}
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-[300px] p-4 space-y-3">
+              <div className="text-sm font-semibold">Price (THB)</div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="number" placeholder="Min" value={filters.minPrice ?? ""} onChange={(e) => setFilters({ ...filters, minPrice: e.target.value ? Number(e.target.value) : undefined })} />
+                <Input type="number" placeholder="Max" value={filters.maxPrice ?? ""} onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value ? Number(e.target.value) : undefined })} />
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setFilters({ ...filters, minPrice: undefined, maxPrice: undefined })}>Clear</Button>
+            </PopoverContent>
+          </Popover>
+
+          {/* Bedrooms */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60">
+                <BedDouble className="h-4 w-4" />
+                {filters.bedrooms != null ? `${filters.bedrooms}+ bed` : "Bedrooms"}
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-[260px] p-3">
+              <div className="mb-2 text-sm font-semibold">Minimum bedrooms</div>
+              <div className="flex flex-wrap gap-1.5">
+                {[0, 1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setFilters({ ...filters, bedrooms: filters.bedrooms === n ? undefined : n })}
+                    className={`h-9 min-w-12 rounded-full border px-3 text-sm font-medium ${filters.bedrooms === n ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
+                  >
+                    {n === 0 ? "Any" : `${n}+`}
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Listing type */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60">
+                <Tag className="h-4 w-4" />
+                {filters.listingType && filters.listingType !== "Any" ? `For ${filters.listingType}` : "For rent / sale"}
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-[200px] p-2">
+              {(["Any", "rent", "sale"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setFilters({ ...filters, listingType: v })}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-secondary/60 ${(filters.listingType ?? "Any") === v ? "font-semibold" : ""}`}
+                >
+                  {v === "Any" ? "Any" : `For ${v}`}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+
+          {/* Near transit */}
+          <button
+            onClick={() => setFilters({ ...filters, nearTransit: filters.nearTransit ? undefined : true })}
+            className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-sm ${filters.nearTransit ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
+          >
+            <Train className="h-4 w-4" />
+            Near BTS / MRT
+            {filters.nearTransit && <span className="h-1.5 w-1.5 rounded-full bg-destructive" />}
+          </button>
+
+          {/* Near university */}
+          <button
+            onClick={() => setFilters({ ...filters, nearUniversity: filters.nearUniversity ? undefined : true })}
+            className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-sm ${filters.nearUniversity ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
+          >
+            <GraduationCap className="h-4 w-4" />
+            Near university
+            {filters.nearUniversity && <span className="h-1.5 w-1.5 rounded-full bg-destructive" />}
+          </button>
+
+          {/* Near mall */}
+          <button
+            onClick={() => setFilters({ ...filters, nearMall: filters.nearMall ? undefined : true })}
+            className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-sm ${filters.nearMall ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
+          >
+            <ShoppingBag className="h-4 w-4" />
+            Near mall
+            {filters.nearMall && <span className="h-1.5 w-1.5 rounded-full bg-destructive" />}
+          </button>
+
+          <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-card shadow-sm hover:bg-secondary/60">
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
