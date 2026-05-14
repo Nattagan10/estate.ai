@@ -3,12 +3,17 @@ import { useMemo, useState, lazy, Suspense } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
-import { Building2, MapPin, Sparkles, Heart, X, ShieldCheck } from "lucide-react";
+import { Building2, MapPin, Sparkles, Heart, X, ShieldCheck, Search, SlidersHorizontal, ChevronDown, Home, Building, Store, Trees, TrendingUp } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { ChatPanel } from "@/components/ChatPanel";
 import { PropertyCard } from "@/components/PropertyCard";
 import { PROPERTY_TYPE_LABEL, type Filters } from "@/lib/filterProperties";
 import { searchProperties } from "@/lib/properties.functions";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import type { Property } from "@/data/properties";
 const PropertyMap = lazy(() => import("@/components/PropertyMap").then((m) => ({ default: m.PropertyMap })));
 
 export const Route = createFileRoute("/")({
@@ -27,6 +32,10 @@ function Index() {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chatKey, setChatKey] = useState(0);
+  const [locationInput, setLocationInput] = useState("");
+  const [typeDraft, setTypeDraft] = useState<Set<Property["propertyType"]>>(new Set());
+  const [typesApplied, setTypesApplied] = useState<Set<Property["propertyType"]>>(new Set());
+  const [typeOpen, setTypeOpen] = useState(false);
 
   // Session is auto-created server-side on first chat message and returned via SSE.
   const startNewChat = () => {
@@ -42,8 +51,40 @@ function Index() {
     placeholderData: (prev) => prev,
   });
 
-  const results = data?.properties ?? [];
-  const total = data?.total ?? 0;
+  const allResults = data?.properties ?? [];
+  const results = typesApplied.size > 0 ? allResults.filter((p) => typesApplied.has(p.propertyType)) : allResults;
+  const total = typesApplied.size > 0 ? results.length : (data?.total ?? 0);
+
+  const typeOptions: { value: Property["propertyType"]; label: string; icon: any }[] = [
+    { value: "house", label: "Single-Family House", icon: Home },
+    { value: "condo", label: "Condo / Apartment", icon: Building },
+    { value: "townhouse", label: "Townhouse", icon: Building2 },
+    { value: "commercial", label: "Commercial", icon: Store },
+  ];
+  const typeCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    allResults.forEach((p) => { m[p.propertyType] = (m[p.propertyType] ?? 0) + 1; });
+    return m;
+  }, [allResults]);
+
+  const toggleTypeDraft = (v: Property["propertyType"]) => {
+    setTypeDraft((prev) => {
+      const n = new Set(prev);
+      if (n.has(v)) n.delete(v); else n.add(v);
+      return n;
+    });
+  };
+  const applyTypeFilters = () => {
+    setTypesApplied(new Set(typeDraft));
+    setTypeOpen(false);
+  };
+  const clearTypeFilters = () => {
+    setTypeDraft(new Set());
+    setTypesApplied(new Set());
+  };
+  const applyLocation = () => {
+    setFilters({ ...filters, area: locationInput.trim() || undefined });
+  };
 
   const activeFilterChips = useMemo(() => {
     const chips: { label: string; clear: () => void }[] = [];
@@ -115,6 +156,73 @@ function Index() {
       </section>
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 md:px-6 md:py-8">
+        <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 md:flex-row md:items-center" style={{ boxShadow: "var(--shadow-card)" }}>
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={locationInput}
+              onChange={(e) => setLocationInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") applyLocation(); }}
+              placeholder="Search by Location (e.g., Sukhumvit, Sathorn)"
+              className="h-11 rounded-xl border-border bg-background pl-9"
+            />
+          </div>
+          <Popover open={typeOpen} onOpenChange={(o) => { setTypeOpen(o); if (o) setTypeDraft(new Set(typesApplied)); }}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="h-11 justify-between gap-2 rounded-xl md:w-[220px]">
+                <span className="truncate text-sm">
+                  {typesApplied.size === 0 ? "Property Type" : `${typesApplied.size} type${typesApplied.size > 1 ? "s" : ""} selected`}
+                </span>
+                <ChevronDown className="h-4 w-4 opacity-60" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[340px] p-0">
+              <div className="border-b border-border px-4 py-3">
+                <div className="text-sm font-semibold">Select Property Types</div>
+              </div>
+              <div className="max-h-[280px] overflow-auto p-2">
+                {typeOptions.map(({ value, label, icon: Icon }) => {
+                  const checked = typeDraft.has(value);
+                  return (
+                    <label key={value} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-secondary/60">
+                      <Checkbox checked={checked} onCheckedChange={() => toggleTypeDraft(value)} />
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                      <span className="flex-1 text-sm">{label}</span>
+                      <span className="text-xs text-muted-foreground">({typeCounts[value] ?? 0})</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {typeDraft.size > 0 && (
+                <div className="border-t border-border px-4 py-3">
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">Selected Types</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Array.from(typeDraft).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => toggleTypeDraft(v)}
+                        className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium hover:bg-secondary/70"
+                      >
+                        {typeOptions.find((o) => o.value === v)?.label}
+                        <X className="h-3 w-3" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2 border-t border-border px-4 py-3">
+                <Button onClick={applyTypeFilters} className="flex-1" size="sm">
+                  Apply Filters{typeDraft.size > 0 ? ` (${typeDraft.size})` : ""}
+                </Button>
+                <Button onClick={clearTypeFilters} variant="ghost" size="sm">Clear All</Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Button onClick={applyLocation} className="h-11 gap-2 rounded-xl md:w-auto">
+            <SlidersHorizontal className="h-4 w-4" /> Filter
+          </Button>
+        </div>
+
         <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
           <div className="space-y-6 order-2 lg:order-1">
             <div className="overflow-hidden rounded-2xl border border-border bg-card" style={{ boxShadow: "var(--shadow-card)" }}>
