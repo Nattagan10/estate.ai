@@ -66,16 +66,18 @@ async function callLovable(
   messages: Array<{ role: string; content: string }>,
   opts?: { stream?: boolean; retries?: number },
 ) {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) throw new Error("LOVABLE_API_KEY missing");
+  const key = process.env.GOOGLE_AI_API_KEY;
+  if (!key) throw new Error("GOOGLE_AI_API_KEY missing");
+  // Strip "google/" provider prefix — Google's OpenAI-compat endpoint expects bare model id
+  const modelId = model.replace(/^google\//, "");
   const retries = opts?.retries ?? 2;
   let attempt = 0;
   let lastResp: Response | null = null;
   while (attempt <= retries) {
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages, stream: opts?.stream ?? false }),
+      body: JSON.stringify({ model: modelId, messages, stream: opts?.stream ?? false }),
     });
     lastResp = resp;
     if (resp.status !== 429) return resp;
