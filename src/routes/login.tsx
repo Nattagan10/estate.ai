@@ -36,22 +36,44 @@ function LoginPage() {
   return (
     <div className="min-h-screen grid place-items-center bg-background p-6">
       <Toaster richColors position="top-center" />
-      <form onSubmit={submit} className="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-card p-8 shadow-[0_20px_60px_-30px_rgba(0,0,0,0.15)]">
+      <form
+        onSubmit={submit}
+        className="w-full max-w-sm space-y-5 rounded-2xl border border-border bg-card p-8 shadow-[0_20px_60px_-30px_rgba(0,0,0,0.15)]"
+      >
         <div className="text-center">
           <h1 className="font-serif text-2xl font-semibold tracking-tight">Estate AI Admin</h1>
-          <p className="text-xs text-muted-foreground mt-1">Sign in to manage listings & sessions</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Sign in to manage listings & sessions
+          </p>
         </div>
         <div className="space-y-3">
-          <input value={username} onChange={(e) => setUsername(e.target.value)} required placeholder="Username"
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground/40" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required placeholder="Password"
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground/40" />
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+            placeholder="Username"
+            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground/40"
+          />
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            type="password"
+            required
+            placeholder="Password"
+            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground/40"
+          />
         </div>
-        <button disabled={busy} type="submit" className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+        <button
+          disabled={busy}
+          type="submit"
+          className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        >
           {busy ? "Signing in…" : "Sign in"}
         </button>
         <div className="text-center text-xs text-muted-foreground">
-          <Link to="/" className="hover:text-foreground">← Back to site</Link>
+          <Link to="/" className="hover:text-foreground">
+            ← Back to site
+          </Link>
         </div>
       </form>
     </div>

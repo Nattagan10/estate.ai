@@ -12,7 +12,7 @@ function assertToken(token: string | undefined) {
 
 export const adminLogin = createServerFn({ method: "POST" })
   .inputValidator((d: { username: string; password: string }) =>
-    z.object({ username: z.string(), password: z.string() }).parse(d)
+    z.object({ username: z.string(), password: z.string() }).parse(d),
   )
   .handler(async ({ data }) => {
     if (data.username !== ADMIN_USER || data.password !== ADMIN_TOKEN) {
@@ -29,33 +29,58 @@ export const adminListSessions = createServerFn({ method: "POST" })
       .from("chat_sessions")
       .select("id, questionnaire, created_at, user_id")
       .order("created_at", { ascending: false })
-      .limit(200);
-    if (error) throw new Error(error.message);
+      .limit(450);
+    if (error) {
+      console.error("Admin fetch error:", error);
+      return { sessions: [] };
+    }
 
     // Get message counts per session
     const ids = (sessions ?? []).map((s) => s.id);
-    let counts: Record<string, number> = {};
+    const counts: Record<string, number> = {};
     if (ids.length) {
       const { data: logs } = await supabaseAdmin
         .from("chat_logs")
         .select("session_id")
         .in("session_id", ids);
-      (logs ?? []).forEach((l: any) => { counts[l.session_id] = (counts[l.session_id] ?? 0) + 1; });
+      (logs ?? []).forEach((l: any) => {
+        counts[l.session_id] = (counts[l.session_id] ?? 0) + 1;
+      });
     }
     return { sessions: (sessions ?? []).map((s) => ({ ...s, message_count: counts[s.id] ?? 0 })) };
   });
 
 export const adminGetSessionLogs = createServerFn({ method: "POST" })
   .inputValidator((d: { token: string; sessionId: string }) =>
-    z.object({ token: z.string(), sessionId: z.string().uuid() }).parse(d)
+    z.object({ token: z.string(), sessionId: z.string().uuid() }).parse(d),
   )
   .handler(async ({ data }) => {
     assertToken(data.token);
     const [s, l] = await Promise.all([
       supabaseAdmin.from("chat_sessions").select("*").eq("id", data.sessionId).single(),
-      supabaseAdmin.from("chat_logs").select("*").eq("session_id", data.sessionId).order("created_at", { ascending: true }),
+      supabaseAdmin
+        .from("chat_logs")
+        .select("*")
+        .eq("session_id", data.sessionId)
+        .order("created_at", { ascending: true }),
     ]);
     if (s.error) throw new Error(s.error.message);
     if (l.error) throw new Error(l.error.message);
     return { session: s.data, logs: l.data ?? [] };
+  });
+
+export const adminDeleteSession = createServerFn({ method: "POST" })
+  .inputValidator((d: { token: string; sessionId: string }) =>
+    z.object({ token: z.string(), sessionId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    assertToken(data.token);
+
+    // Explicitly delete logs first just in case there's no cascade on the foreign key
+    await supabaseAdmin.from("chat_logs").delete().eq("session_id", data.sessionId);
+
+    const { error } = await supabaseAdmin.from("chat_sessions").delete().eq("id", data.sessionId);
+    if (error) throw new Error(error.message);
+
+    return { success: true };
   });

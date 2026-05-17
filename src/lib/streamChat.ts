@@ -28,7 +28,12 @@ export async function streamChat({
 
     if (!resp.ok || !resp.body) {
       let msg = "Failed to reach assistant.";
-      try { const j = await resp.json(); if (j?.error) msg = j.error; } catch { /* noop */ }
+      try {
+        const j = await resp.json();
+        if (j?.error) msg = j.error;
+      } catch {
+        /* noop */
+      }
       onError(msg);
       return;
     }
@@ -47,16 +52,29 @@ export async function streamChat({
         let line = buf.slice(0, nl);
         buf = buf.slice(nl + 1);
         if (line.endsWith("\r")) line = line.slice(0, -1);
-        if (line === "") { currentEvent = "message"; continue; }
+        if (line === "") {
+          currentEvent = "message";
+          continue;
+        }
         if (line.startsWith(":")) continue;
-        if (line.startsWith("event: ")) { currentEvent = line.slice(7).trim(); continue; }
+        if (line.startsWith("event: ")) {
+          currentEvent = line.slice(7).trim();
+          continue;
+        }
         if (!line.startsWith("data: ")) continue;
         const payload = line.slice(6).trim();
         if (currentEvent === "filters") {
-          try { onFilters?.(JSON.parse(payload)); } catch { /* noop */ }
+          try {
+            onFilters?.(JSON.parse(payload));
+          } catch {
+            /* noop */
+          }
           continue;
         }
-        if (payload === "[DONE]") { done = true; break; }
+        if (payload === "[DONE]") {
+          done = true;
+          break;
+        }
         try {
           const parsed = JSON.parse(payload);
           const c = parsed.choices?.[0]?.delta?.content as string | undefined;

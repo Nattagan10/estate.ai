@@ -67,7 +67,11 @@ export function ChatPanel({
         acc += chunk;
         setMessages((prev) => {
           const last = prev[prev.length - 1];
-          if (last?.role === "assistant" && last.content !== undefined && prev.length > next.length) {
+          if (
+            last?.role === "assistant" &&
+            last.content !== undefined &&
+            prev.length > next.length
+          ) {
             return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: acc } : m));
           }
           return [...prev, { role: "assistant", content: acc }];
@@ -82,8 +86,14 @@ export function ChatPanel({
   };
 
   return (
-    <div className="flex h-full flex-col rounded-2xl bg-card border border-border overflow-hidden" style={{ boxShadow: "var(--shadow-elegant)" }}>
-      <div className="flex items-center gap-3 border-b border-border bg-card px-5 py-4" style={{ backgroundImage: "var(--gradient-gloss)" }}>
+    <div
+      className="flex h-full flex-col rounded-2xl bg-card border border-border overflow-hidden"
+      style={{ boxShadow: "var(--shadow-elegant)" }}
+    >
+      <div
+        className="flex items-center gap-3 border-b border-border bg-card px-5 py-4"
+        style={{ backgroundImage: "var(--gradient-gloss)" }}
+      >
         <div className="grid h-10 w-10 place-items-center rounded-full bg-primary text-primary-foreground">
           <Building2 className="h-5 w-5" />
         </div>
@@ -150,7 +160,10 @@ export function ChatPanel({
       )}
 
       <form
-        onSubmit={(e) => { e.preventDefault(); send(input); }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          send(input);
+        }}
         className="flex items-center gap-2 border-t border-border bg-card px-4 py-3"
       >
         <input

@@ -3,7 +3,28 @@ import { useMemo, useState, lazy, Suspense } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
-import { Building2, MapPin, Sparkles, Heart, X, ShieldCheck, Search, SlidersHorizontal, ChevronDown, ChevronRight, Home, Building, Store, BellPlus, DollarSign, BedDouble, Train, GraduationCap, ShoppingBag, Tag } from "lucide-react";
+import {
+  Building2,
+  MapPin,
+  Sparkles,
+  Heart,
+  X,
+  ShieldCheck,
+  Search,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronRight,
+  Home,
+  Building,
+  Store,
+  BellPlus,
+  DollarSign,
+  BedDouble,
+  Train,
+  GraduationCap,
+  ShoppingBag,
+  Tag,
+} from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { ChatPanel } from "@/components/ChatPanel";
 import { PropertyCard } from "@/components/PropertyCard";
@@ -14,13 +35,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import type { Property } from "@/data/properties";
-const PropertyMap = lazy(() => import("@/components/PropertyMap").then((m) => ({ default: m.PropertyMap })));
+const PropertyMap = lazy(() =>
+  import("@/components/PropertyMap").then((m) => ({ default: m.PropertyMap })),
+);
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Estate AI — Bangkok Property Assistant" },
-      { name: "description", content: "Chat with an AI consultant to discover Bangkok properties matched to your budget, transit, and lifestyle." },
+      {
+        name: "description",
+        content:
+          "Chat with an AI consultant to discover Bangkok properties matched to your budget, transit, and lifestyle.",
+      },
     ],
   }),
   component: Index,
@@ -52,7 +79,8 @@ function Index() {
   });
 
   const allResults = data?.properties ?? [];
-  const results = typesApplied.size > 0 ? allResults.filter((p) => typesApplied.has(p.propertyType)) : allResults;
+  const results =
+    typesApplied.size > 0 ? allResults.filter((p) => typesApplied.has(p.propertyType)) : allResults;
   const total = typesApplied.size > 0 ? results.length : (data?.total ?? 0);
 
   const typeOptions: { value: Property["propertyType"]; label: string; icon: any }[] = [
@@ -63,14 +91,17 @@ function Index() {
   ];
   const typeCounts = useMemo(() => {
     const m: Record<string, number> = {};
-    allResults.forEach((p) => { m[p.propertyType] = (m[p.propertyType] ?? 0) + 1; });
+    allResults.forEach((p) => {
+      m[p.propertyType] = (m[p.propertyType] ?? 0) + 1;
+    });
     return m;
   }, [allResults]);
 
   const toggleTypeDraft = (v: Property["propertyType"]) => {
     setTypeDraft((prev) => {
       const n = new Set(prev);
-      if (n.has(v)) n.delete(v); else n.add(v);
+      if (n.has(v)) n.delete(v);
+      else n.add(v);
       return n;
     });
   };
@@ -88,24 +119,59 @@ function Index() {
 
   const activeFilterChips = useMemo(() => {
     const chips: { label: string; clear: () => void }[] = [];
-    if (filters.area) chips.push({ label: `Area: ${filters.area}`, clear: () => setFilters({ ...filters, area: undefined }) });
+    if (filters.area)
+      chips.push({
+        label: `Area: ${filters.area}`,
+        clear: () => setFilters({ ...filters, area: undefined }),
+      });
     if (filters.propertyType && filters.propertyType !== "Any")
-      chips.push({ label: PROPERTY_TYPE_LABEL[filters.propertyType], clear: () => setFilters({ ...filters, propertyType: undefined }) });
+      chips.push({
+        label: PROPERTY_TYPE_LABEL[filters.propertyType],
+        clear: () => setFilters({ ...filters, propertyType: undefined }),
+      });
     if (filters.listingType && filters.listingType !== "Any")
-      chips.push({ label: `For ${filters.listingType}`, clear: () => setFilters({ ...filters, listingType: undefined }) });
-    if (filters.bedrooms != null) chips.push({ label: `${filters.bedrooms}+ bed`, clear: () => setFilters({ ...filters, bedrooms: undefined }) });
-    if (filters.maxPrice != null) chips.push({ label: `≤ ฿${filters.maxPrice.toLocaleString()}`, clear: () => setFilters({ ...filters, maxPrice: undefined }) });
-    if (filters.minPrice != null) chips.push({ label: `≥ ฿${filters.minPrice.toLocaleString()}`, clear: () => setFilters({ ...filters, minPrice: undefined }) });
-    if (filters.nearTransit) chips.push({ label: "Near BTS/MRT", clear: () => setFilters({ ...filters, nearTransit: undefined }) });
-    if (filters.nearUniversity) chips.push({ label: "Near University", clear: () => setFilters({ ...filters, nearUniversity: undefined }) });
-    if (filters.nearMall) chips.push({ label: "Near Mall", clear: () => setFilters({ ...filters, nearMall: undefined }) });
+      chips.push({
+        label: `For ${filters.listingType}`,
+        clear: () => setFilters({ ...filters, listingType: undefined }),
+      });
+    if (filters.bedrooms != null)
+      chips.push({
+        label: `${filters.bedrooms}+ bed`,
+        clear: () => setFilters({ ...filters, bedrooms: undefined }),
+      });
+    if (filters.maxPrice != null)
+      chips.push({
+        label: `≤ ฿${filters.maxPrice.toLocaleString()}`,
+        clear: () => setFilters({ ...filters, maxPrice: undefined }),
+      });
+    if (filters.minPrice != null)
+      chips.push({
+        label: `≥ ฿${filters.minPrice.toLocaleString()}`,
+        clear: () => setFilters({ ...filters, minPrice: undefined }),
+      });
+    if (filters.nearTransit)
+      chips.push({
+        label: "Near BTS/MRT",
+        clear: () => setFilters({ ...filters, nearTransit: undefined }),
+      });
+    if (filters.nearUniversity)
+      chips.push({
+        label: "Near University",
+        clear: () => setFilters({ ...filters, nearUniversity: undefined }),
+      });
+    if (filters.nearMall)
+      chips.push({
+        label: "Near Mall",
+        clear: () => setFilters({ ...filters, nearMall: undefined }),
+      });
     return chips;
   }, [filters]);
 
   const toggleFavorite = (id: string) =>
     setFavorites((prev) => {
       const n = new Set(prev);
-      if (n.has(id)) n.delete(id); else n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
 
@@ -120,7 +186,9 @@ function Index() {
             </div>
             <div>
               <div className="font-serif text-lg font-semibold leading-tight">Estate AI</div>
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Bangkok · 500 listings · AI</div>
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                Bangkok · 500 listings · AI
+              </div>
             </div>
           </div>
           <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs text-muted-foreground md:flex">
@@ -131,7 +199,10 @@ function Index() {
             <div className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium">
               <Heart className="h-3.5 w-3.5 text-destructive" /> {favorites.size}
             </div>
-            <Link to="/admin" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-accent">
+            <Link
+              to="/admin"
+              className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-accent"
+            >
               <ShieldCheck className="h-3.5 w-3.5" /> Admin
             </Link>
           </div>
@@ -145,11 +216,13 @@ function Index() {
               <span className="h-1.5 w-1.5 rounded-full bg-foreground" /> Live AI consultant
             </div>
             <h1 className="font-serif text-3xl font-semibold leading-tight md:text-5xl">
-              Find your next Bangkok home<br />
+              Find your next Bangkok home
+              <br />
               <span className="text-muted-foreground">in conversation.</span>
             </h1>
             <p className="mt-3 text-sm text-muted-foreground md:text-base">
-              Tell our AI what matters — area, budget, BTS, vibe — and watch listings narrow from 500 to your perfect match.
+              Tell our AI what matters — area, budget, BTS, vibe — and watch listings narrow from
+              500 to your perfect match.
             </p>
           </div>
         </div>
@@ -162,12 +235,17 @@ function Index() {
             <Input
               value={locationInput}
               onChange={(e) => setLocationInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") applyLocation(); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applyLocation();
+              }}
               placeholder="Search by location"
               className="h-12 rounded-full border-border bg-card pl-11 pr-4 text-sm shadow-sm"
             />
           </div>
-          <Button variant="outline" className="h-12 gap-2 rounded-full border-border bg-card px-5 shadow-sm">
+          <Button
+            variant="outline"
+            className="h-12 gap-2 rounded-full border-border bg-card px-5 shadow-sm"
+          >
             <BellPlus className="h-4 w-4" /> Create alert
           </Button>
         </div>
@@ -188,7 +266,13 @@ function Index() {
           </button>
 
           {/* Property type */}
-          <Popover open={typeOpen} onOpenChange={(o) => { setTypeOpen(o); if (o) setTypeDraft(new Set(typesApplied)); }}>
+          <Popover
+            open={typeOpen}
+            onOpenChange={(o) => {
+              setTypeOpen(o);
+              if (o) setTypeDraft(new Set(typesApplied));
+            }}
+          >
             <PopoverTrigger asChild>
               <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60">
                 <Building className="h-4 w-4" />
@@ -196,24 +280,35 @@ function Index() {
                 <ChevronDown className="h-3.5 w-3.5 opacity-60" />
               </button>
             </PopoverTrigger>
-            <PopoverContent style={{zIndex:1000}} align="start" className="w-[320px] p-0">
-              <div className="border-b border-border px-4 py-3 text-sm font-semibold">Property type</div>
+            <PopoverContent style={{ zIndex: 1000 }} align="start" className="w-[320px] p-0">
+              <div className="border-b border-border px-4 py-3 text-sm font-semibold">
+                Property type
+              </div>
               <div className="max-h-[280px] overflow-auto p-2">
                 {typeOptions.map(({ value, label, icon: Icon }) => {
                   const checked = typeDraft.has(value);
                   return (
-                    <label key={value} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-secondary/60">
+                    <label
+                      key={value}
+                      className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-secondary/60"
+                    >
                       <Checkbox checked={checked} onCheckedChange={() => toggleTypeDraft(value)} />
                       <Icon className="h-4 w-4 text-muted-foreground" />
                       <span className="flex-1 text-sm">{label}</span>
-                      <span className="text-xs text-muted-foreground">({typeCounts[value] ?? 0})</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({typeCounts[value] ?? 0})
+                      </span>
                     </label>
                   );
                 })}
               </div>
               <div className="flex items-center gap-2 border-t border-border px-4 py-3">
-                <Button onClick={applyTypeFilters} className="flex-1" size="sm">Apply{typeDraft.size > 0 ? ` (${typeDraft.size})` : ""}</Button>
-                <Button onClick={clearTypeFilters} variant="ghost" size="sm">Clear</Button>
+                <Button onClick={applyTypeFilters} className="flex-1" size="sm">
+                  Apply{typeDraft.size > 0 ? ` (${typeDraft.size})` : ""}
+                </Button>
+                <Button onClick={clearTypeFilters} variant="ghost" size="sm">
+                  Clear
+                </Button>
               </div>
             </PopoverContent>
           </Popover>
@@ -223,17 +318,49 @@ function Index() {
             <PopoverTrigger asChild>
               <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60">
                 <DollarSign className="h-4 w-4" />
-                {filters.maxPrice || filters.minPrice ? `฿${(filters.minPrice ?? 0).toLocaleString()} – ${filters.maxPrice ? "฿" + filters.maxPrice.toLocaleString() : "∞"}` : "Price"}
+                {filters.maxPrice || filters.minPrice
+                  ? `฿${(filters.minPrice ?? 0).toLocaleString()} – ${filters.maxPrice ? "฿" + filters.maxPrice.toLocaleString() : "∞"}`
+                  : "Price"}
                 <ChevronDown className="h-3.5 w-3.5 opacity-60" />
               </button>
             </PopoverTrigger>
-            <PopoverContent style={{zIndex:1000}} align="start" className="w-[300px] p-4 space-y-3">
+            <PopoverContent
+              style={{ zIndex: 1000 }}
+              align="start"
+              className="w-[300px] p-4 space-y-3"
+            >
               <div className="text-sm font-semibold">Price (THB)</div>
               <div className="grid grid-cols-2 gap-2">
-                <Input type="number" placeholder="Min" value={filters.minPrice ?? ""} onChange={(e) => setFilters({ ...filters, minPrice: e.target.value ? Number(e.target.value) : undefined })} />
-                <Input type="number" placeholder="Max" value={filters.maxPrice ?? ""} onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value ? Number(e.target.value) : undefined })} />
+                <Input
+                  type="number"
+                  placeholder="Min"
+                  value={filters.minPrice ?? ""}
+                  onChange={(e) =>
+                    setFilters({
+                      ...filters,
+                      minPrice: e.target.value ? Number(e.target.value) : undefined,
+                    })
+                  }
+                />
+                <Input
+                  type="number"
+                  placeholder="Max"
+                  value={filters.maxPrice ?? ""}
+                  onChange={(e) =>
+                    setFilters({
+                      ...filters,
+                      maxPrice: e.target.value ? Number(e.target.value) : undefined,
+                    })
+                  }
+                />
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setFilters({ ...filters, minPrice: undefined, maxPrice: undefined })}>Clear</Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setFilters({ ...filters, minPrice: undefined, maxPrice: undefined })}
+              >
+                Clear
+              </Button>
             </PopoverContent>
           </Popover>
 
@@ -246,13 +373,15 @@ function Index() {
                 <ChevronDown className="h-3.5 w-3.5 opacity-60" />
               </button>
             </PopoverTrigger>
-            <PopoverContent style={{zIndex:1000}} align="start" className="w-[260px] p-3">
+            <PopoverContent style={{ zIndex: 1000 }} align="start" className="w-[260px] p-3">
               <div className="mb-2 text-sm font-semibold">Minimum bedrooms</div>
               <div className="flex flex-wrap gap-1.5">
                 {[0, 1, 2, 3, 4, 5].map((n) => (
                   <button
                     key={n}
-                    onClick={() => setFilters({ ...filters, bedrooms: filters.bedrooms === n ? undefined : n })}
+                    onClick={() =>
+                      setFilters({ ...filters, bedrooms: filters.bedrooms === n ? undefined : n })
+                    }
                     className={`h-9 min-w-12 rounded-full border px-3 text-sm font-medium ${filters.bedrooms === n ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
                   >
                     {n === 0 ? "Any" : `${n}+`}
@@ -267,11 +396,13 @@ function Index() {
             <PopoverTrigger asChild>
               <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60">
                 <Tag className="h-4 w-4" />
-                {filters.listingType && filters.listingType !== "Any" ? `For ${filters.listingType}` : "For rent / sale"}
+                {filters.listingType && filters.listingType !== "Any"
+                  ? `For ${filters.listingType}`
+                  : "For rent / sale"}
                 <ChevronDown className="h-3.5 w-3.5 opacity-60" />
               </button>
             </PopoverTrigger>
-            <PopoverContent style={{zIndex:1000}} align="start" className="w-[200px] p-2">
+            <PopoverContent style={{ zIndex: 1000 }} align="start" className="w-[200px] p-2">
               {(["Any", "rent", "sale"] as const).map((v) => (
                 <button
                   key={v}
@@ -286,7 +417,9 @@ function Index() {
 
           {/* Near transit */}
           <button
-            onClick={() => setFilters({ ...filters, nearTransit: filters.nearTransit ? undefined : true })}
+            onClick={() =>
+              setFilters({ ...filters, nearTransit: filters.nearTransit ? undefined : true })
+            }
             className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-sm ${filters.nearTransit ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
           >
             <Train className="h-4 w-4" />
@@ -296,7 +429,9 @@ function Index() {
 
           {/* Near university */}
           <button
-            onClick={() => setFilters({ ...filters, nearUniversity: filters.nearUniversity ? undefined : true })}
+            onClick={() =>
+              setFilters({ ...filters, nearUniversity: filters.nearUniversity ? undefined : true })
+            }
             className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-sm ${filters.nearUniversity ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
           >
             <GraduationCap className="h-4 w-4" />
@@ -306,7 +441,9 @@ function Index() {
 
           {/* Near mall */}
           <button
-            onClick={() => setFilters({ ...filters, nearMall: filters.nearMall ? undefined : true })}
+            onClick={() =>
+              setFilters({ ...filters, nearMall: filters.nearMall ? undefined : true })
+            }
             className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-sm ${filters.nearMall ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
           >
             <ShoppingBag className="h-4 w-4" />
@@ -321,31 +458,58 @@ function Index() {
 
         <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
           <div className="space-y-6 order-2 lg:order-1">
-            <div className="overflow-hidden rounded-2xl border border-border bg-card" style={{ boxShadow: "var(--shadow-card)" }}>
+            <div
+              className="overflow-hidden rounded-2xl border border-border bg-card"
+              style={{ boxShadow: "var(--shadow-card)" }}
+            >
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-accent" />
                   <span className="text-sm font-medium">Live Map</span>
                   <span className="text-xs text-muted-foreground">· {total} matches</span>
                 </div>
-                {filters.area && <span className="text-xs font-medium text-destructive">Highlighting {filters.area}</span>}
+                {filters.area && (
+                  <span className="text-xs font-medium text-destructive">
+                    Highlighting {filters.area}
+                  </span>
+                )}
               </div>
               <div className="h-[340px] w-full">
-                <Suspense fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground">Loading map…</div>}>
-                  <PropertyMap properties={results} focusedId={focusedId} highlightArea={filters.area ?? null} onSelect={setFocusedId} />
+                <Suspense
+                  fallback={
+                    <div className="grid h-full place-items-center text-sm text-muted-foreground">
+                      Loading map…
+                    </div>
+                  }
+                >
+                  <PropertyMap
+                    properties={results}
+                    focusedId={focusedId}
+                    highlightArea={filters.area ?? null}
+                    onSelect={setFocusedId}
+                  />
                 </Suspense>
               </div>
             </div>
 
             {activeFilterChips.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-3">
-                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">From chat</span>
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  From chat
+                </span>
                 {activeFilterChips.map((c) => (
-                  <button key={c.label} onClick={c.clear} className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-xs font-medium hover:bg-secondary/70">
+                  <button
+                    key={c.label}
+                    onClick={c.clear}
+                    className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-xs font-medium hover:bg-secondary/70"
+                  >
                     {c.label} <X className="h-3 w-3" />
                   </button>
                 ))}
-                <button onClick={() => setFilters({})} className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground">
+                <button
+                  onClick={() => setFilters({})}
+                  className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
                   Clear all
                 </button>
               </div>
@@ -354,12 +518,19 @@ function Index() {
             <div>
               <div className="mb-3 flex items-baseline justify-between">
                 <h2 className="font-serif text-xl font-semibold">Recommended for you</h2>
-                <span className="text-xs text-muted-foreground">{isLoading ? "Loading…" : `${results.length} of ${total}`}</span>
+                <span className="text-xs text-muted-foreground">
+                  {isLoading ? "Loading…" : `${results.length} of ${total}`}
+                </span>
               </div>
               {results.length === 0 && !isLoading ? (
                 <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
-                  <p className="text-sm text-muted-foreground">No properties match yet. Try refining your request in the chat.</p>
-                  <button onClick={() => setFilters({})} className="mt-3 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">
+                  <p className="text-sm text-muted-foreground">
+                    No properties match yet. Try refining your request in the chat.
+                  </p>
+                  <button
+                    onClick={() => setFilters({})}
+                    className="mt-3 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+                  >
                     Reset
                   </button>
                 </div>

@@ -11,7 +11,13 @@ type Props = {
   highlighted?: boolean;
 };
 
-export function PropertyCard({ property, isFavorite, onToggleFavorite, onFocus, highlighted }: Props) {
+export function PropertyCard({
+  property,
+  isFavorite,
+  onToggleFavorite,
+  onFocus,
+  highlighted,
+}: Props) {
   const transit = property.nearby.find((n) => n.type === "BTS" || n.type === "MRT");
   const soldOut = property.availability !== "available";
   return (
@@ -31,11 +37,16 @@ export function PropertyCard({ property, isFavorite, onToggleFavorite, onFocus, 
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent" />
         <button
-          onClick={(e) => { e.stopPropagation(); onToggleFavorite(property.id); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite(property.id);
+          }}
           aria-label="Favorite"
           className="absolute top-3 right-3 grid h-9 w-9 place-items-center rounded-full bg-white/90 backdrop-blur transition hover:scale-110"
         >
-          <Heart className={`h-4 w-4 ${isFavorite ? "fill-destructive text-destructive" : "text-foreground"}`} />
+          <Heart
+            className={`h-4 w-4 ${isFavorite ? "fill-destructive text-destructive" : "text-foreground"}`}
+          />
         </button>
         <div className="absolute bottom-3 left-3 flex items-center gap-2">
           <Badge className="bg-accent text-accent-foreground hover:bg-accent border-0 font-medium">
@@ -43,7 +54,8 @@ export function PropertyCard({ property, isFavorite, onToggleFavorite, onFocus, 
           </Badge>
           {transit && (
             <Badge className="bg-white/90 text-foreground hover:bg-white border-0">
-              <Train className="mr-1 h-3 w-3" /> {transit.distanceKm <= 0.3 ? "Steps to" : `${transit.distanceKm}km to`} {transit.name}
+              <Train className="mr-1 h-3 w-3" />{" "}
+              {transit.distanceKm <= 0.3 ? "Steps to" : `${transit.distanceKm}km to`} {transit.name}
             </Badge>
           )}
         </div>
@@ -60,9 +72,17 @@ export function PropertyCard({ property, isFavorite, onToggleFavorite, onFocus, 
         </div>
         <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{property.description}</p>
         <div className="mt-3 flex items-center gap-4 text-xs text-foreground/70">
-          {property.bedrooms > 0 && <span className="flex items-center gap-1"><Bed className="h-3.5 w-3.5" /> {property.bedrooms}</span>}
-          <span className="flex items-center gap-1"><Bath className="h-3.5 w-3.5" /> {property.bathrooms}</span>
-          <span className="flex items-center gap-1"><Maximize className="h-3.5 w-3.5" /> {property.area} m²</span>
+          {property.bedrooms > 0 && (
+            <span className="flex items-center gap-1">
+              <Bed className="h-3.5 w-3.5" /> {property.bedrooms}
+            </span>
+          )}
+          <span className="flex items-center gap-1">
+            <Bath className="h-3.5 w-3.5" /> {property.bathrooms}
+          </span>
+          <span className="flex items-center gap-1">
+            <Maximize className="h-3.5 w-3.5" /> {property.area} m²
+          </span>
         </div>
       </div>
     </div>

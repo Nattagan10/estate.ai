@@ -31,7 +31,9 @@ function applyFilters(query: any, f: SearchFilters) {
   return q;
 }
 
-export async function searchPropertiesServer(filters: SearchFilters): Promise<{ properties: Property[]; total: number }> {
+export async function searchPropertiesServer(
+  filters: SearchFilters,
+): Promise<{ properties: Property[]; total: number }> {
   const f = FiltersSchema.parse(filters ?? {});
   const limit = f.limit ?? 60;
 
@@ -42,7 +44,8 @@ export async function searchPropertiesServer(filters: SearchFilters): Promise<{ 
 
   let rows = (data ?? []) as DbPropertyRow[];
   // Tag-based "near X" filters require post-filter on jsonb
-  const matchTransit = (p: DbPropertyRow) => (p.nearby ?? []).some((n) => n.type === "BTS" || n.type === "MRT");
+  const matchTransit = (p: DbPropertyRow) =>
+    (p.nearby ?? []).some((n) => n.type === "BTS" || n.type === "MRT");
   const matchUni = (p: DbPropertyRow) => (p.nearby ?? []).some((n) => n.type === "University");
   const matchMall = (p: DbPropertyRow) => (p.nearby ?? []).some((n) => n.type === "Mall");
   if (f.nearTransit) rows = rows.filter(matchTransit);
@@ -103,7 +106,10 @@ export const adminListProperties = createServerFn({ method: "POST" })
   .inputValidator((d: { search?: string; limit?: number }) => d ?? {})
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId);
-    let q = supabaseAdmin.from("properties").select("*", { count: "exact" }).order("updated_at", { ascending: false });
+    let q = supabaseAdmin
+      .from("properties")
+      .select("*", { count: "exact" })
+      .order("updated_at", { ascending: false });
     if (data.search) q = q.ilike("name", `%${data.search}%`);
     const { data: rows, count, error } = await q.limit(data.limit ?? 100);
     if (error) throw new Error(error.message);
@@ -120,7 +126,11 @@ export const adminUpsertProperty = createServerFn({ method: "POST" })
       if (error) throw new Error(error.message);
       return { id: data.id };
     }
-    const { data: ins, error } = await supabaseAdmin.from("properties").insert(data).select("id").single();
+    const { data: ins, error } = await supabaseAdmin
+      .from("properties")
+      .insert(data)
+      .select("id")
+      .single();
     if (error) throw new Error(error.message);
     return { id: ins.id as string };
   });
@@ -141,8 +151,16 @@ export const adminGetAnalytics = createServerFn({ method: "GET" })
     await assertAdmin(context.userId);
     const [props, sessions, logs] = await Promise.all([
       supabaseAdmin.from("properties").select("area_name, property_type, price, listing_type"),
-      supabaseAdmin.from("chat_sessions").select("id, questionnaire, created_at").order("created_at", { ascending: false }).limit(200),
-      supabaseAdmin.from("chat_logs").select("id, session_id, role, content, filters_applied, created_at").order("created_at", { ascending: false }).limit(200),
+      supabaseAdmin
+        .from("chat_sessions")
+        .select("id, questionnaire, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabaseAdmin
+        .from("chat_logs")
+        .select("id, session_id, role, content, filters_applied, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200),
     ]);
     if (props.error) throw new Error(props.error.message);
     if (sessions.error) throw new Error(sessions.error.message);
@@ -155,8 +173,13 @@ export const adminGetAnalytics = createServerFn({ method: "GET" })
       byType[r.property_type] = (byType[r.property_type] ?? 0) + 1;
     });
     return {
-      counts: { properties: (props.data ?? []).length, sessions: (sessions.data ?? []).length, logs: (logs.data ?? []).length },
-      byArea, byType,
+      counts: {
+        properties: (props.data ?? []).length,
+        sessions: (sessions.data ?? []).length,
+        logs: (logs.data ?? []).length,
+      },
+      byArea,
+      byType,
       sessions: sessions.data ?? [],
       logs: logs.data ?? [],
     };

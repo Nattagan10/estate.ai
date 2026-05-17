@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { APIProvider, Map, AdvancedMarker, useMap, InfoWindow, Pin } from "@vis.gl/react-google-maps";
+import {
+  APIProvider,
+  Map,
+  AdvancedMarker,
+  useMap,
+  InfoWindow,
+  Pin,
+} from "@vis.gl/react-google-maps";
 import type { Property } from "@/data/properties";
 import { formatPrice } from "@/lib/filterProperties";
 
@@ -8,32 +15,32 @@ const AREA_CENTERS: Record<string, { lat: number; lng: number; radius: number }>
   Thonglor: { lat: 13.7307, lng: 100.5806, radius: 900 },
   "Phrom Phong": { lat: 13.7308, lng: 100.5697, radius: 900 },
   Ekkamai: { lat: 13.7196, lng: 100.5853, radius: 900 },
-  "Bang Na": { lat: 13.6680, lng: 100.6045, radius: 1300 },
-  Silom: { lat: 13.7253, lng: 100.5340, radius: 900 },
+  "Bang Na": { lat: 13.668, lng: 100.6045, radius: 1300 },
+  Silom: { lat: 13.7253, lng: 100.534, radius: 900 },
   Sathorn: { lat: 13.7236, lng: 100.5288, radius: 900 },
   Siam: { lat: 13.7466, lng: 100.5347, radius: 800 },
-  Chidlom: { lat: 13.7440, lng: 100.5435, radius: 700 },
-  Ari: { lat: 13.7793, lng: 100.5450, radius: 800 },
-  Kaset: { lat: 13.8480, lng: 100.5710, radius: 1200 },
-  "Lat Phrao": { lat: 13.8160, lng: 100.5610, radius: 1300 },
-  Ratchada: { lat: 13.7700, lng: 100.5740, radius: 1100 },
-  "Huai Khwang": { lat: 13.7770, lng: 100.5740, radius: 1100 },
-  "Bang Sue": { lat: 13.8030, lng: 100.5380, radius: 1200 },
-  Chatuchak: { lat: 13.7990, lng: 100.5530, radius: 1200 },
-  Ramkhamhaeng: { lat: 13.7560, lng: 100.6100, radius: 1300 },
-  "Bang Kapi": { lat: 13.7660, lng: 100.6470, radius: 1300 },
-  Thonburi: { lat: 13.7270, lng: 100.4880, radius: 1300 },
-  "Bang Rak": { lat: 13.7280, lng: 100.5200, radius: 900 },
-  Pinklao: { lat: 13.7770, lng: 100.4790, radius: 1100 },
-  "On Nut": { lat: 13.7050, lng: 100.6010, radius: 900 },
-  "Udom Suk": { lat: 13.6940, lng: 100.6090, radius: 900 },
-  Rangsit: { lat: 13.9870, lng: 100.6160, radius: 1800 },
+  Chidlom: { lat: 13.744, lng: 100.5435, radius: 700 },
+  Ari: { lat: 13.7793, lng: 100.545, radius: 800 },
+  Kaset: { lat: 13.848, lng: 100.571, radius: 1200 },
+  "Lat Phrao": { lat: 13.816, lng: 100.561, radius: 1300 },
+  Ratchada: { lat: 13.77, lng: 100.574, radius: 1100 },
+  "Huai Khwang": { lat: 13.777, lng: 100.574, radius: 1100 },
+  "Bang Sue": { lat: 13.803, lng: 100.538, radius: 1200 },
+  Chatuchak: { lat: 13.799, lng: 100.553, radius: 1200 },
+  Ramkhamhaeng: { lat: 13.756, lng: 100.61, radius: 1300 },
+  "Bang Kapi": { lat: 13.766, lng: 100.647, radius: 1300 },
+  Thonburi: { lat: 13.727, lng: 100.488, radius: 1300 },
+  "Bang Rak": { lat: 13.728, lng: 100.52, radius: 900 },
+  Pinklao: { lat: 13.777, lng: 100.479, radius: 1100 },
+  "On Nut": { lat: 13.705, lng: 100.601, radius: 900 },
+  "Udom Suk": { lat: 13.694, lng: 100.609, radius: 900 },
+  Rangsit: { lat: 13.987, lng: 100.616, radius: 1800 },
 };
 
 function MapController({
   properties,
   focusedId,
-  highlightArea
+  highlightArea,
 }: {
   properties: Property[];
   focusedId: string | null;
@@ -96,10 +103,14 @@ export function PropertyMap({
         gestureHandling="greedy"
         disableDefaultUI={true}
         mapId="DEMO_MAP_ID"
-        style={{ width: '100%', height: '100%', borderRadius: '1rem' }}
+        style={{ width: "100%", height: "100%", borderRadius: "1rem" }}
       >
-        <MapController properties={properties} focusedId={focusedId} highlightArea={highlightArea} />
-        
+        <MapController
+          properties={properties}
+          focusedId={focusedId}
+          highlightArea={highlightArea}
+        />
+
         {properties.map((p) => {
           const isActive = p.id === activeId;
           return (
@@ -112,11 +123,15 @@ export function PropertyMap({
               }}
               zIndex={isActive ? 100 : 1}
             >
-              <Pin background={isActive ? "#ef4444" : "#9ca3af"} borderColor={isActive ? "#b91c1c" : "#4b5563"} glyphColor="#fff" />
+              <Pin
+                background={isActive ? "#ef4444" : "#9ca3af"}
+                borderColor={isActive ? "#b91c1c" : "#4b5563"}
+                glyphColor="#fff"
+              />
             </AdvancedMarker>
           );
         })}
-        
+
         {activeProp && (
           <InfoWindow
             position={{ lat: activeProp.lat, lng: activeProp.lng }}
