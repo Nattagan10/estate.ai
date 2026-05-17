@@ -10,6 +10,7 @@ type ExtractionResult = {
   filters: SearchFilters;
   resetRequested: boolean;
   name?: string;
+  phone?: string;
   age?: number;
   purpose?: string;
 };
@@ -19,6 +20,7 @@ function localExtractFilters(text: string): ExtractionResult {
   const next: SearchFilters = {};
   let resetRequested = false;
   let name: string | undefined;
+  let phone: string | undefined;
   let age: number | undefined;
   let purpose: string | undefined;
 
@@ -129,7 +131,7 @@ function localExtractFilters(text: string): ExtractionResult {
     next.listingType = "sale";
 
   const maxPriceMatch =
-    t.match(/(?:under|max|<|ไม่เกิน|งบ|budget)[^\d]*(\d+)[k,]*(\d*)/i) ||
+    t.match(/(?:under|max|<|ไม่เกิน|งบ|budget|ราคา)[\s:=]*([\d,]+)[k,]*(\d*)/i) ||
     t.match(/\b(\d{1,3}(?:,\d{3})+)\b/) ||
     t.match(/\b(\d{2,})k\b/i) ||
     t.match(/(\d+(?:\.\d+)?)\s*万/);
@@ -170,10 +172,14 @@ function localExtractFilters(text: string): ExtractionResult {
   else if (t.match(/\b(live|living|อยู่เอง|พักอาศัย|自住)\b/i)) purpose = "living";
 
   // Name (Very basic heuristic)
-  const nameMatch = text.match(/(?:my name is|i am|ฉันชื่อ|ชื่อ|叫)\s+([A-Za-zก-๙]{2,15})\b/i);
+  const nameMatch = text.match(/(?:my name is|i am|ฉันชื่อ|ชื่อ|เรียก|叫)[\s]*([A-Za-zก-๙]{2,15})\b/i);
   if (nameMatch) name = nameMatch[1];
 
-  return { filters: next, resetRequested, name, age, purpose };
+  // Phone
+  const phoneMatch = text.match(/(?:0|\+66)\s?\d{2,3}[-\s]?\d{3}[-\s]?\d{3,4}/);
+  if (phoneMatch) phone = phoneMatch[0];
+
+  return { filters: next, resetRequested, name, phone, age, purpose };
 }
 
 export const Route = createFileRoute("/api/chat")({
@@ -210,6 +216,7 @@ export const Route = createFileRoute("/api/chat")({
             filters: extracted,
             resetRequested,
             name: extName,
+            phone: extPhone,
             age: extAge,
             purpose: extPurpose,
           } = localExtractFilters(userText);
@@ -228,26 +235,98 @@ export const Route = createFileRoute("/api/chat")({
                 ? "Thai"
                 : "English";
 
-          // 3. Two-Pass Query properties
+          // 3. Fetch Questionnaire (early) to inform AI
+          let currentQ: Record<string, any> = {};
+          if (activeSessionId) {
+            try {
+              const { data: sessData } = await supabaseAdmin
+                .from("chat_sessions")
+                .select("questionnaire")
+                .eq("id", activeSessionId)
+                .single();
+              if (sessData?.questionnaire) currentQ = sessData.questionnaire as Record<string, any>;
+            } catch (e) { /* noop */ }
+          }
+
+          // 3.5 Use AI to extract difficult profile details from context
+          let aiExtractedProfile: Record<string, any> = {};
+          if (activeSessionId && userText.length > 0) {
+            try {
+              const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY });
+              const chatCtx = messages.slice(-3).map(m => `${m.role}: ${m.content}`).join("\n");
+              const exResult = await ai.models.generateContent({
+                 model: "gemini-2.5-flash",
+                 contents: `Extract user profile data from the conversation.
+                 Conversation context:
+                 ${chatCtx}
+                 
+                 Return ONLY a JSON object with newly found data. Keys allowed:
+                 - "customer_name" (string, e.g. "นัท", "John")
+                 - "phone" (string)
+                 - "age" (number)
+                 - "purpose" ("living" or "investment")
+                 If nothing is found, return {}.`,
+                 config: { responseMimeType: "application/json", temperature: 0.1 }
+              });
+              if (exResult.text) {
+                aiExtractedProfile = JSON.parse(exResult.text);
+              }
+            } catch(e) {
+              console.error("AI Profile Extraction Error:", e);
+            }
+          }
+
+          // Update questionnaire locally with new extracted info before checking missing
+          const qUpdate: Record<string, any> = { language: detectedLang };
+          if (newFilters.area) qUpdate.location = newFilters.area;
+          if (newFilters.maxPrice) qUpdate.budget = newFilters.maxPrice;
+          if (newFilters.propertyType) qUpdate.property_type = newFilters.propertyType;
+          if (newFilters.listingType) qUpdate.payment_type = newFilters.listingType;
+          
+          // Regex extraction fallback
+          if (extName) qUpdate.customer_name = extName;
+          if (extPhone) qUpdate.phone = extPhone;
+          if (extAge) qUpdate.age = extAge;
+          if (extPurpose) qUpdate.purpose = extPurpose;
+
+          // AI extraction overrides regex for these specific fields
+          if (aiExtractedProfile.customer_name) qUpdate.customer_name = aiExtractedProfile.customer_name;
+          if (aiExtractedProfile.phone) qUpdate.phone = aiExtractedProfile.phone;
+          if (aiExtractedProfile.age) qUpdate.age = aiExtractedProfile.age;
+          if (aiExtractedProfile.purpose) qUpdate.purpose = aiExtractedProfile.purpose;
+          
+          Object.assign(currentQ, qUpdate);
+
+          // 4. Two-Pass Query properties
           let { properties, total } = await searchPropertiesServer({ ...newFilters, limit: 12 });
           let didDropFilters = false;
+          let nearbyFallback = false;
 
           if (total === 0 && Object.keys(extracted).length > 0 && !resetRequested) {
-            // PASS 2: The combined filters yielded 0 results.
-            // The user explicitly asked for something new, but the old context dragged it down.
-            // We drop the old conflicting filters and search ONLY with the newly extracted ones!
-            const fallbackFilters = { ...extracted };
+            // PASS 2: Try to find something nearby instead of just dropping
+            let fallbackFilters = { ...newFilters };
+            delete fallbackFilters.area; // Broaden the area
+            delete fallbackFilters.propertyType; // Broaden the type
+            
             const fallbackResult = await searchPropertiesServer({ ...fallbackFilters, limit: 12 });
-
             if (fallbackResult.total > 0) {
               properties = fallbackResult.properties;
               total = fallbackResult.total;
               newFilters = fallbackFilters;
-              didDropFilters = true;
+              nearbyFallback = true;
+            } else {
+               // Complete reset
+               const rawFallback = await searchPropertiesServer({ ...extracted, limit: 12 });
+               if (rawFallback.total > 0) {
+                 properties = rawFallback.properties;
+                 total = rawFallback.total;
+                 newFilters = extracted;
+                 didDropFilters = true;
+               }
             }
           }
 
-          // 4. Log user message and update questionnaire to Supabase
+          // 5. Log user message and update questionnaire to Supabase
           if (activeSessionId && lastUser) {
             try {
               // Save user log
@@ -258,35 +337,21 @@ export const Route = createFileRoute("/api/chat")({
                 filters_applied: newFilters as any,
               });
 
-              // Fetch and merge questionnaire
-              const { data: sessData } = await supabaseAdmin
-                .from("chat_sessions")
-                .select("questionnaire")
-                .eq("id", activeSessionId)
-                .single();
-              const currentQ = (sessData?.questionnaire ?? {}) as Record<string, any>;
-
-              const qUpdate: Record<string, any> = { language: detectedLang };
-              if (newFilters.area) qUpdate.location = newFilters.area;
-              if (newFilters.maxPrice) qUpdate.budget = newFilters.maxPrice;
-              if (newFilters.propertyType) qUpdate.property_type = newFilters.propertyType;
-              if (newFilters.listingType) qUpdate.payment_type = newFilters.listingType;
-              if (extName) qUpdate.customer_name = extName;
-              if (extAge) qUpdate.age = extAge;
-              if (extPurpose) qUpdate.purpose = extPurpose;
-
+              // Push questionnaire update
               await supabaseAdmin
                 .from("chat_sessions")
-                .update({ questionnaire: { ...currentQ, ...qUpdate } as any })
+                .update({ questionnaire: currentQ as any })
                 .eq("id", activeSessionId);
             } catch (e) {
               /* noop */
             }
           }
 
-          // 5. Build Gemini System Prompt
+          // 6. Build Gemini System Prompt
           let filterNote = "";
-          if (didDropFilters) {
+          if (nearbyFallback) {
+            filterNote = "IMPORTANT: You couldn't find an exact match in their requested area/type, so you are recommending similar or nearby properties instead. Politely explain this.";
+          } else if (didDropFilters) {
             filterNote =
               "IMPORTANT: You had to clear their previous filters because there were zero matches. Politely let the user know you've updated the search to match their latest request, ignoring previous constraints.";
           } else if (resetRequested) {
@@ -294,18 +359,41 @@ export const Route = createFileRoute("/api/chat")({
               "IMPORTANT: The user asked to clear the search or look for something else. Acknowledge that you have reset the map and are starting fresh.";
           }
 
+          // Determine missing fields
+          const requiredFields = {
+            "Customer Name": currentQ.customer_name,
+            "Phone Number": currentQ.phone,
+            "Age": currentQ.age,
+            "Purpose (Living vs Investment)": currentQ.purpose,
+            "Budget": currentQ.budget,
+            "Location Preference": currentQ.location,
+            "Property Type (House/Condo)": currentQ.property_type,
+            "Payment Type (Rent/Sale)": currentQ.payment_type,
+          };
+          const missingFields = Object.entries(requiredFields)
+            .filter(([_, val]) => !val)
+            .map(([key]) => key);
+
+          const missingPrompt = missingFields.length > 0
+            ? `Your secondary goal is to naturally collect missing client profile details: [${missingFields.join(", ")}].
+            CRITICAL INSTRUCTION: DO NOT interrogate the user. Ask only 1 or 2 of these questions smoothly at the end of your response, weaving them naturally into the conversation.`
+            : `You have successfully gathered all necessary client profile details. Focus entirely on recommending properties and scheduling viewings.`;
+
           const SYSTEM_PROMPT = `You are Estate AI, an elite, professional, and highly knowledgeable real estate consultant in Bangkok.
-Your primary role is to assist clients in finding their perfect property for rent or sale.
+Your primary role is to assist clients in finding their perfect property.
 You MUST maintain a polite, premium, and human-like sales tone at all times.
 You MUST automatically detect the user's language and respond in the SAME language (e.g., Thai, English, Chinese, Japanese).
+CRITICAL: Keep your responses EXTREMELY short, concise, and to the point. Do not use long, unnecessary paragraphs. Present the information clearly and quickly.
 ${filterNote}
+
+${missingPrompt}
 
 Below is a list of actual database properties that match the user's search. 
 If the list is empty, apologize politely and suggest adjusting their criteria.
 If there are properties:
 1. Present up to 3 of them beautifully using markdown.
-2. For each, state the Name, Area, Bedrooms, Property Type, and Price.
-3. Add a short, personalized reason why it fits their lifestyle based on their request.
+2. For each, state the Name, Area, Beds, Type, and Price (very briefly).
+3. Add a short, personalized reason why it fits their lifestyle (1 sentence max).
 4. Tell them you have highlighted these on the map, and gently ask if they want to schedule a viewing.
 
 Found Properties (${total} total matches):
@@ -330,6 +418,11 @@ ${properties.map((p) => `- ${p.name} (Area: ${p.area_name}, Type: ${p.propertyTy
                   role: m.role === "assistant" ? "model" : "user",
                   parts: [{ text: m.content }],
                 }));
+
+                if (process.env.NODE_ENV === "development") {
+                  console.log(`[Dev] AI Request started for session: ${activeSessionId}`);
+                  console.log(`[Dev] Extracted Filters:`, newFilters);
+                }
 
                 const responseStream = await ai.models.generateContentStream({
                   model: "gemini-2.5-flash",
@@ -362,10 +455,16 @@ ${properties.map((p) => `- ${p.name} (Area: ${p.area_name}, Type: ${p.propertyTy
                 }
               } catch (err: any) {
                 console.error("Gemini API Error:", err);
+                const isQuotaExceeded = err?.status === 429 || err?.message?.includes("quota") || err?.message?.includes("exhausted");
                 const errorText =
                   detectedLang === "Thai"
-                    ? "ขออภัยครับ ระบบ AI เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง"
-                    : "I apologize, but I am currently experiencing connection issues. Please try again later.";
+                    ? isQuotaExceeded 
+                        ? "ขณะนี้มีผู้ใช้งานจำนวนมากเกินขีดจำกัดของระบบ AI แต่ฉันได้พบทรัพย์สินที่ตรงกับความต้องการของคุณเรียบร้อยแล้ว กรุณาดูรายละเอียดจากการ์ดด้านล่างได้เลยครับ สนใจหลังไหนเป็นพิเศษไหมครับ?"
+                        : "ขออภัยครับ ระบบ AI เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง"
+                    : isQuotaExceeded
+                        ? "Our AI consultant service is currently at maximum capacity. However, I've successfully found matching properties for you! Please review the interactive map and cards below. Let me know if you'd like to schedule a viewing."
+                        : "I apologize, but I am currently experiencing connection issues. Please try again later.";
+                
                 fullResponse = errorText;
                 const textEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: errorText } }] })}\n\n`;
                 controller.enqueue(enc.encode(textEvent));

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState, lazy, Suspense } from "react";
+import { useMemo, useState, lazy, Suspense, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
@@ -63,6 +63,12 @@ function Index() {
   const [typeDraft, setTypeDraft] = useState<Set<Property["propertyType"]>>(new Set());
   const [typesApplied, setTypesApplied] = useState<Set<Property["propertyType"]>>(new Set());
   const [typeOpen, setTypeOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters, typesApplied]);
 
   // Session is auto-created server-side on first chat message and returned via SSE.
   const startNewChat = () => {
@@ -74,7 +80,7 @@ function Index() {
   const search = useServerFn(searchProperties);
   const { data, isLoading } = useQuery({
     queryKey: ["properties", filters],
-    queryFn: () => search({ data: { ...filters, limit: 60 } }),
+    queryFn: () => search({ data: { ...filters, limit: 450 } }),
     placeholderData: (prev) => prev,
   });
 
@@ -82,6 +88,30 @@ function Index() {
   const results =
     typesApplied.size > 0 ? allResults.filter((p) => typesApplied.has(p.propertyType)) : allResults;
   const total = typesApplied.size > 0 ? results.length : (data?.total ?? 0);
+
+  const ITEMS_PER_PAGE = 50;
+  const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE);
+  const paginatedResults = results.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+
+  const handlePageChange = (p: number) => {
+    setIsTransitioning(true);
+    setPage(p);
+    setTimeout(() => setIsTransitioning(false), 300);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleSelectProperty = (id: string) => {
+    setFocusedId(id);
+    const index = results.findIndex((p) => p.id === id);
+    if (index !== -1) {
+      const targetPage = Math.floor(index / ITEMS_PER_PAGE) + 1;
+      if (targetPage !== page) {
+        setIsTransitioning(true);
+        setPage(targetPage);
+        setTimeout(() => setIsTransitioning(false), 300);
+      }
+    }
+  };
 
   const typeOptions: { value: Property["propertyType"]; label: string; icon: any }[] = [
     { value: "house", label: "Single-Family House", icon: Home },
@@ -486,7 +516,7 @@ function Index() {
                     properties={results}
                     focusedId={focusedId}
                     highlightArea={filters.area ?? null}
-                    onSelect={setFocusedId}
+                    onSelect={handleSelectProperty}
                   />
                 </Suspense>
               </div>
@@ -519,7 +549,7 @@ function Index() {
               <div className="mb-3 flex items-baseline justify-between">
                 <h2 className="font-serif text-xl font-semibold">Recommended for you</h2>
                 <span className="text-xs text-muted-foreground">
-                  {isLoading ? "Loading…" : `${results.length} of ${total}`}
+                  {isLoading ? "Loading…" : `Showing ${(page - 1) * ITEMS_PER_PAGE + 1}-${Math.min(page * ITEMS_PER_PAGE, results.length)} of ${total}`}
                 </span>
               </div>
               {results.length === 0 && !isLoading ? (
@@ -535,17 +565,64 @@ function Index() {
                   </button>
                 </div>
               ) : (
-                <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                  {results.map((p) => (
-                    <PropertyCard
-                      key={p.id}
-                      property={p}
-                      isFavorite={favorites.has(p.id)}
-                      onToggleFavorite={toggleFavorite}
-                      onFocus={setFocusedId}
-                      highlighted={focusedId === p.id}
-                    />
-                  ))}
+                <div className={`transition-opacity duration-300 ${isTransitioning ? "opacity-50" : "opacity-100"}`}>
+                  <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                    {paginatedResults.map((p) => (
+                      <PropertyCard
+                        key={p.id}
+                        property={p}
+                        isFavorite={favorites.has(p.id)}
+                        onToggleFavorite={toggleFavorite}
+                        onFocus={handleSelectProperty}
+                        highlighted={focusedId === p.id}
+                      />
+                    ))}
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="mt-8 flex items-center justify-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(page - 1)}
+                        disabled={page === 1 || isTransitioning}
+                        className="rounded-full px-4"
+                      >
+                        Prev
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
+                          if (p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1)) {
+                            return (
+                              <Button
+                                key={p}
+                                variant={p === page ? "default" : "ghost"}
+                                size="sm"
+                                className={`h-8 w-8 p-0 rounded-full ${p === page ? 'shadow-md' : ''}`}
+                                onClick={() => handlePageChange(p)}
+                                disabled={isTransitioning}
+                              >
+                                {p}
+                              </Button>
+                            );
+                          }
+                          if (p === page - 2 || p === page + 2) {
+                            return <span key={p} className="text-muted-foreground px-1">...</span>;
+                          }
+                          return null;
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(page + 1)}
+                        disabled={page === totalPages || isTransitioning}
+                        className="rounded-full px-4"
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

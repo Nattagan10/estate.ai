@@ -278,21 +278,41 @@ function SessionsView({ token }: { token: string }) {
                 <div className="mt-1 text-[11px] text-muted-foreground">
                   {new Date(s.created_at).toLocaleString()}
                 </div>
-                {(q.budget || q.location || q.customer_phone) && (
+                {(q.budget || q.location || q.phone || q.property_type || q.payment_type || q.purpose || q.age) && (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {q.budget && (
-                      <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px]">
+                      <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
                         ฿{Number(q.budget).toLocaleString()}
                       </span>
                     )}
                     {q.location && (
-                      <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px]">
+                      <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
                         {q.location}
                       </span>
                     )}
-                    {q.customer_phone && (
-                      <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px]">
-                        {q.customer_phone}
+                    {q.property_type && (
+                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                        {q.property_type}
+                      </span>
+                    )}
+                    {q.payment_type && (
+                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                        {q.payment_type}
+                      </span>
+                    )}
+                    {q.purpose && (
+                      <span className="rounded bg-secondary-foreground/10 px-1.5 py-0.5 text-[10px] text-secondary-foreground">
+                        {q.purpose}
+                      </span>
+                    )}
+                    {q.phone && (
+                      <span className="rounded bg-green-500/10 px-1.5 py-0.5 text-[10px] text-green-600">
+                        📞 {q.phone}
+                      </span>
+                    )}
+                    {q.age && (
+                      <span className="rounded bg-orange-500/10 px-1.5 py-0.5 text-[10px] text-orange-600">
+                        Age: {q.age}
                       </span>
                     )}
                   </div>
@@ -328,7 +348,7 @@ function SessionsView({ token }: { token: string }) {
 
 const FIELD_ORDER = [
   "customer_name",
-  "customer_phone",
+  "phone",
   "age",
   "language",
   "purpose",
