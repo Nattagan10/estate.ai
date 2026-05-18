@@ -28,6 +28,9 @@ import {
 import { Link } from "@tanstack/react-router";
 import { ChatPanel } from "@/components/ChatPanel";
 import { PropertyCard } from "@/components/PropertyCard";
+import { HeroCarousel } from "@/components/HeroCarousel";
+import { PropertyRow } from "@/components/PropertyRow";
+import { FavoritesModal } from "@/components/FavoritesModal";
 import { PROPERTY_TYPE_LABEL, type Filters } from "@/lib/filterProperties";
 import { searchProperties } from "@/lib/properties.functions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -65,6 +68,7 @@ function Index() {
   const [typeOpen, setTypeOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
 
   useEffect(() => {
     setPage(1);
@@ -88,6 +92,7 @@ function Index() {
   const results =
     typesApplied.size > 0 ? allResults.filter((p) => typesApplied.has(p.propertyType)) : allResults;
   const total = typesApplied.size > 0 ? results.length : (data?.total ?? 0);
+  const favoriteProperties = allResults.filter(p => favorites.has(p.id));
 
   const ITEMS_PER_PAGE = 50;
   const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE);
@@ -217,18 +222,18 @@ function Index() {
             <div>
               <div className="font-serif text-lg font-semibold leading-tight">Estate AI</div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                Bangkok · 500 listings · AI
+                Bangkok · 450 listings · AI
               </div>
             </div>
           </div>
-          <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs text-muted-foreground md:flex">
-            <Sparkles className="h-3.5 w-3.5 text-accent" />
-            Conversational property search
-          </div>
+
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium">
+            <button 
+              onClick={() => setIsFavoritesOpen(true)}
+              className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-secondary/80 transition-colors"
+            >
               <Heart className="h-3.5 w-3.5 text-destructive" /> {favorites.size}
-            </div>
+            </button>
             <Link
               to="/admin"
               className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-accent"
@@ -239,24 +244,14 @@ function Index() {
         </div>
       </header>
 
-      <section className="border-b border-border" style={{ background: "var(--gradient-hero)" }}>
-        <div className="mx-auto max-w-[1600px] px-6 py-10 md:py-14">
-          <div className="max-w-2xl text-foreground">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-border bg-card/70 px-3 py-1 text-xs backdrop-blur">
-              <span className="h-1.5 w-1.5 rounded-full bg-foreground" /> Live AI consultant
-            </div>
-            <h1 className="font-serif text-3xl font-semibold leading-tight md:text-5xl">
-              Find your next Bangkok home
-              <br />
-              <span className="text-muted-foreground">in conversation.</span>
-            </h1>
-            <p className="mt-3 text-sm text-muted-foreground md:text-base">
-              Tell our AI what matters — area, budget, BTS, vibe — and watch listings narrow from
-              500 to your perfect match.
-            </p>
-          </div>
-        </div>
-      </section>
+      <HeroCarousel />
+      <PropertyRow 
+        properties={allResults.slice(0, 15)} 
+        onViewMap={(id) => {
+          handleSelectProperty(id);
+          document.getElementById('map-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }}
+      />
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 md:px-6 md:py-8">
         <div className="mb-4 flex items-center gap-3">
@@ -489,6 +484,7 @@ function Index() {
         <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
           <div className="space-y-6 order-2 lg:order-1">
             <div
+              id="map-container"
               className="overflow-hidden rounded-2xl border border-border bg-card"
               style={{ boxShadow: "var(--shadow-card)" }}
             >
@@ -643,9 +639,21 @@ function Index() {
 
       <footer className="border-t border-border bg-card/50 py-6">
         <div className="mx-auto max-w-[1600px] px-6 text-center text-xs text-muted-foreground">
-          Estate AI · Demo prototype · 500 mock Bangkok listings
+          Estate AI · Demo prototype · 450 mock Bangkok listings
         </div>
       </footer>
+
+      <FavoritesModal 
+        isOpen={isFavoritesOpen} 
+        onClose={() => setIsFavoritesOpen(false)} 
+        favorites={favoriteProperties}
+        onRemoveFavorite={toggleFavorite}
+        onViewMap={(id) => {
+          setIsFavoritesOpen(false);
+          handleSelectProperty(id);
+          document.getElementById('map-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }}
+      />
     </div>
   );
 }

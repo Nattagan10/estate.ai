@@ -34,7 +34,7 @@ export function ChatPanel({
       role: "assistant",
       content:
         initialAssistantMessage ??
-        "Hi! I'm **Estate AI**. Tell me about the area, budget or vibe you want and I'll narrow down 500 Bangkok listings instantly.",
+        "Hi! I'm **Estate AI**. Tell me about the area, budget or vibe you want and I'll narrow down 450 Bangkok listings instantly.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -99,10 +99,7 @@ export function ChatPanel({
         </div>
         <div className="flex-1">
           <div className="font-serif text-base font-semibold text-foreground">Estate AI</div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="h-2 w-2 rounded-full bg-green-500" />
-            500 Bangkok listings · MCP-powered filtering
-          </div>
+
         </div>
         <Sparkles className="h-4 w-4 text-muted-foreground" />
         {onNewChat && (
