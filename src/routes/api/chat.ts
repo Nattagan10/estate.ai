@@ -321,7 +321,7 @@ export const Route = createFileRoute("/api/chat")({
               const chatCtx = messages.map(m => `${m.role}: ${m.content}`).join("\n");
               
               const exResult = await ai.models.generateContent({
-                 model: "gemini-2.5-flash",
+                 model: "gemini-2.0-flash",
                  contents: `You are a precise real estate CRM data extractor. 
                  Analyze the entire conversation context to extract customer profile details.
                  
@@ -518,30 +518,37 @@ export const Route = createFileRoute("/api/chat")({
             .filter(([_, val]) => !val)
             .map(([key]) => key);
 
-          const missingPrompt = missingFields.length > 0
-            ? `Your secondary goal is to naturally collect missing client profile details: [${missingFields.join(", ")}].
-            CRITICAL INSTRUCTION: DO NOT interrogate the user. Ask only 1 or 2 of these questions smoothly at the end of your response, weaving them naturally into the conversation.`
-            : `You have successfully gathered all necessary client profile details. Focus entirely on recommending properties and scheduling viewings.`;
+          // Priority order for collecting missing fields — ask one at a time
+          const fieldPriority: [string, string, any][] = [
+            ["customer_name", "ขอทราบชื่อของคุณลูกค้าด้วยนะคะ?", currentQ.customer_name],
+            ["purpose", "ซื้อไว้อยู่เองหรือลงทุนคะ?", currentQ.purpose],
+            ["property_type", "สนใจคอนโด บ้าน หรือทาวน์เฮ้าส์คะ?", currentQ.property_type],
+            ["payment_type", "ต้องการซื้อหรือเช่าคะ?", currentQ.payment_type],
+            ["location", "ต้องการทำเลแถวไหนคะ?", currentQ.location],
+            ["budget", "งบประมาณอยู่ที่เท่าไหร่คะ?", currentQ.budget],
+            ["age", "ขอทราบอายุของคุณลูกค้าด้วยนะคะ?", currentQ.age],
+            ["phone", "ขอเบอร์โทรศัพท์เพื่อให้ทีมงานติดต่อกลับได้เลยคะ?", currentQ.phone],
+          ];
+          const nextMissingField = fieldPriority.find(([, , val]) => !val);
+          const nextQuestion = nextMissingField ? nextMissingField[1] : null;
 
-          const SYSTEM_PROMPT = `You are Estate AI, an elite, professional, and highly knowledgeable real estate consultant in Bangkok.
-Your primary role is to assist clients in finding their perfect property.
-You MUST maintain a polite, premium, and human-like sales tone at all times.
-You MUST automatically detect the user's language and respond in the SAME language (e.g., Thai, English, Chinese, Japanese).
-CRITICAL: Keep your responses EXTREMELY short, concise, and to the point. Do not use long, unnecessary paragraphs. Present the information clearly and quickly.
+          const missingPrompt = nextQuestion
+            ? `หลังจากตอบเรื่อง property แล้ว ให้ถามคำถามนี้ 1 ข้อเท่านั้น (ห้ามถามหลายข้อพร้อมกัน): "${nextQuestion}"`
+            : `ได้ข้อมูลครบแล้ว เน้นแนะนำ property และนัดดูห้องค่ะ`;
+
+          const SYSTEM_PROMPT = `คุณคือ Estate AI ที่ปรึกษาอสังหาริมทรัพย์ในกรุงเทพฯ มืออาชีพ
+ลักษณะการพูด: ใช้ "ค่ะ" ทุกครั้ง สุภาพ อบอุ่น กระชับ เป็นธรรมชาติ
+ตอบสั้น ๆ ได้ใจความ ไม่พูดยืดยาว ไม่ใช้ bullet point ซ้อนกันหลายชั้น
+ตรวจจับภาษาของผู้ใช้แล้วตอบเป็นภาษาเดียวกันเสมอ (ไทย อังกฤษ จีน ญี่ปุ่น) หากภาษาอื่นให้ใช้ "ka" แทน "ค่ะ"
 ${filterNote}
 
 ${missingPrompt}
 
-Below is a list of actual database properties that match the user's search. 
-If the list is empty, apologize politely and suggest adjusting their criteria.
-If there are properties:
-1. Present up to 3 of them beautifully using markdown.
-2. For each, state the Name, Area, Beds, Type, and Price (very briefly).
-3. Add a short, personalized reason why it fits their lifestyle (1 sentence max).
-4. Tell them you have highlighted these on the map, and gently ask if they want to schedule a viewing.
+รายการ property ที่พบในระบบ (${total} รายการ):
+${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเภท: ${p.propertyType}, ห้องนอน: ${p.bedrooms || "Studio"}, ราคา: ฿${p.price.toLocaleString()})`).join("\n")}
 
-Found Properties (${total} total matches):
-${properties.map((p) => `- ${p.name} (Area: ${p.area_name}, Type: ${p.propertyType}, Beds: ${p.bedrooms || "Studio"}, Price: ฿${p.price.toLocaleString()})`).join("\n")}
+ถ้ามี property: แนะนำไม่เกิน 3 รายการ บอกชื่อ ทำเล ห้องนอน ราคา แล้วบอกเหตุผลสั้น ๆ 1 ประโยคว่าเหมาะกับลูกค้าอย่างไร
+ถ้าไม่มี property: แจ้งสั้น ๆ และแนะนำให้ปรับเงื่อนไข
 `;
 
           // 6. Return standard SSE Stream
@@ -568,14 +575,30 @@ ${properties.map((p) => `- ${p.name} (Area: ${p.area_name}, Type: ${p.propertyTy
                   console.log(`[Dev] Extracted Filters:`, newFilters);
                 }
 
-                const responseStream = await ai.models.generateContentStream({
-                  model: "gemini-2.5-flash",
-                  contents: [...history, { role: "user", parts: [{ text: userText }] }],
-                  config: {
-                    systemInstruction: SYSTEM_PROMPT,
-                    temperature: 0.7,
-                  },
-                });
+                // Try primary model, fallback to gemini-2.0-flash on 503
+                const MODELS = ["gemini-2.0-flash", "gemini-2.5-flash"];
+                let responseStream: AsyncIterable<any> | null = null;
+                let lastErr: any = null;
+                for (const model of MODELS) {
+                  try {
+                    responseStream = await ai.models.generateContentStream({
+                      model,
+                      contents: [...history, { role: "user", parts: [{ text: userText }] }],
+                      config: { systemInstruction: SYSTEM_PROMPT, temperature: 0.7 },
+                    });
+                    if (process.env.NODE_ENV === "development") console.log(`[Dev] Using model: ${model}`);
+                    break;
+                  } catch (e: any) {
+                    lastErr = e;
+                    const isOverloaded = e?.status === 503 || e?.message?.includes("503") || e?.message?.includes("high demand") || e?.message?.includes("UNAVAILABLE");
+                    if (isOverloaded) {
+                      console.warn(`[Dev] ${model} overloaded, trying next model...`);
+                      continue;
+                    }
+                    throw e;
+                  }
+                }
+                if (!responseStream) throw lastErr;
 
                 let detectedAiLocation: string | null = null;
 
@@ -598,19 +621,42 @@ ${properties.map((p) => `- ${p.name} (Area: ${p.area_name}, Type: ${p.propertyTy
                   }
                 }
               } catch (err: any) {
-                console.error("Gemini API Error:", err);
-                const isQuotaExceeded = err?.status === 429 || err?.message?.includes("quota") || err?.message?.includes("exhausted");
-                const errorText =
-                  detectedLang === "Thai"
-                    ? isQuotaExceeded 
-                        ? "ขณะนี้มีผู้ใช้งานจำนวนมากเกินขีดจำกัดของระบบ AI แต่ฉันได้พบทรัพย์สินที่ตรงกับความต้องการของคุณเรียบร้อยแล้ว กรุณาดูรายละเอียดจากการ์ดด้านล่างได้เลยครับ สนใจหลังไหนเป็นพิเศษไหมครับ?"
-                        : "ขออภัยครับ ระบบ AI เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง"
-                    : isQuotaExceeded
-                        ? "Our AI consultant service is currently at maximum capacity. However, I've successfully found matching properties for you! Please review the interactive map and cards below. Let me know if you'd like to schedule a viewing."
-                        : "I apologize, but I am currently experiencing connection issues. Please try again later.";
-                
-                fullResponse = errorText;
-                const textEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: errorText } }] })}\n\n`;
+                console.warn("Gemini unavailable, using rule-based fallback:", (err as any)?.status);
+
+                // Build rule-based response — never show error to customer
+                const top3 = properties.slice(0, 3);
+                let fallback = "";
+
+                if (detectedLang === "Thai") {
+                  if (nearbyFallback) {
+                    fallback += "ไม่พบ property ตรงทำเลที่ต้องการค่ะ แต่มีตัวเลือกใกล้เคียงที่น่าสนใจค่ะ\n\n";
+                  } else if (total === 0) {
+                    fallback += "ขออภัยค่ะ ยังไม่พบ property ที่ตรงกับเงื่อนไขนี้ ลองปรับงบหรือทำเลดูนะคะ";
+                  } else {
+                    fallback += `พบ ${total} รายการค่ะ ขอแนะนำตัวเลือกน่าสนใจดังนี้ค่ะ\n\n`;
+                    top3.forEach((p) => {
+                      fallback += `**${p.name}**\n`;
+                      fallback += `ทำเล: ${p.area_name} · ${p.propertyType} · ${p.bedrooms || "Studio"} ห้องนอน · ฿${p.price.toLocaleString()}\n\n`;
+                    });
+                  }
+                  if (nextQuestion && total > 0) fallback += nextQuestion;
+                } else {
+                  if (nearbyFallback) {
+                    fallback += "No exact match found, but here are some nearby options:\n\n";
+                  } else if (total === 0) {
+                    fallback += "No properties found matching your criteria. Try adjusting your budget or location.";
+                  } else {
+                    fallback += `Found ${total} properties. Here are top picks:\n\n`;
+                    top3.forEach((p) => {
+                      fallback += `**${p.name}**\n`;
+                      fallback += `${p.area_name} · ${p.propertyType} · ${p.bedrooms || "Studio"} bed · ฿${p.price.toLocaleString()}\n\n`;
+                    });
+                  }
+                  if (nextQuestion && total > 0) fallback += nextQuestion.replace("คะ?", "?");
+                }
+
+                fullResponse = fallback;
+                const textEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: fallback } }] })}\n\n`;
                 controller.enqueue(enc.encode(textEvent));
               }
 

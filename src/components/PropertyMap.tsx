@@ -73,6 +73,44 @@ function MapController({
   return null;
 }
 
+function ZoneHighlight({ area }: { area?: string | null }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || typeof window === "undefined" || !(window as any).google) return;
+    if (!area || !AREA_CENTERS[area]) return;
+
+    const c = AREA_CENTERS[area];
+    const circle = new (window as any).google.maps.Circle({
+      map,
+      center: { lat: c.lat, lng: c.lng },
+      radius: c.radius,
+      fillColor: "#f59e0b",
+      fillOpacity: 0.18,
+      strokeColor: "#f59e0b",
+      strokeOpacity: 0.9,
+      strokeWeight: 2.5,
+    });
+
+    // Animated pulse effect — expand then contract once
+    let growing = true;
+    let scale = 1;
+    const interval = setInterval(() => {
+      scale += growing ? 0.008 : -0.008;
+      if (scale >= 1.12) growing = false;
+      if (scale <= 1) { growing = true; scale = 1; }
+      circle.setRadius(c.radius * scale);
+    }, 30);
+
+    return () => {
+      clearInterval(interval);
+      circle.setMap(null);
+    };
+  }, [map, area]);
+
+  return null;
+}
+
 export function PropertyMap({
   properties,
   focusedId,
@@ -110,6 +148,7 @@ export function PropertyMap({
           focusedId={focusedId}
           highlightArea={highlightArea}
         />
+        <ZoneHighlight area={highlightArea} />
 
         {properties.map((p) => {
           const isActive = p.id === activeId;
