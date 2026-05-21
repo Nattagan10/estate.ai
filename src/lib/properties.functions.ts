@@ -37,7 +37,7 @@ function applyFilters(query: any, f: SearchFilters) {
 
   if (f.area) {
     q = q.or(
-      `neighborhood.ilike.%${f.area}%,district.ilike.%${f.area}%,province.ilike.%${f.area}%`,
+      `name.ilike.%${f.area}%,neighborhood.ilike.%${f.area}%,district.ilike.%${f.area}%,province.ilike.%${f.area}%`,
     );
   }
 

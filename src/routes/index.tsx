@@ -96,14 +96,24 @@ function Index() {
     staleTime: 30_000,
   });
 
+  const hasActiveFilters = !!(
+    filters.area ||
+    (filters.propertyTypes && filters.propertyTypes.length > 0) ||
+    (filters.propertyType && filters.propertyType !== "Any") ||
+    filters.minPrice != null ||
+    filters.maxPrice != null ||
+    filters.nearTransit
+  );
+
   const { data: mapData } = useQuery({
     queryKey: ["map-pins", filters],
     queryFn: () => mapSearch({ data: { ...filters } }),
+    enabled: hasActiveFilters,
     placeholderData: (prev) => prev,
     staleTime: 60_000,
   });
 
-  const mapPins = mapData?.pins ?? [];
+  const mapPins = hasActiveFilters ? (mapData?.pins ?? []) : [];
 
   const results = data?.properties ?? [];
   const total = data?.total ?? 0;
@@ -272,7 +282,7 @@ function Index() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") applyLocation();
               }}
-              placeholder="Search by location"
+              placeholder="Search by location or project name"
               className="h-12 rounded-full border-border bg-card pl-11 pr-4 text-sm shadow-sm"
             />
           </div>
