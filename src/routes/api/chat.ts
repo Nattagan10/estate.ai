@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { searchPropertiesServer, type SearchFilters } from "@/lib/properties.functions";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { GoogleGenAI } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
 
 type Msg = { role: "user" | "assistant"; content: string };
 type ReqBody = { messages: Msg[]; filters?: SearchFilters; sessionId?: string | null };
@@ -316,41 +316,32 @@ export const Route = createFileRoute("/api/chat")({
           let aiExtractedProfile: Record<string, any> = {};
           if (activeSessionId && userText.length > 0) {
             try {
-              const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY });
-              // Include the entire current chat context so Gemini can see previous questions
+              const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
               const chatCtx = messages.map(m => `${m.role}: ${m.content}`).join("\n");
-              
-              const exResult = await ai.models.generateContent({
-                 model: "gemini-2.0-flash",
-                 contents: `You are a precise real estate CRM data extractor. 
-                 Analyze the entire conversation context to extract customer profile details.
-                 
-                 CRITICAL SEMANTIC MATCHING FOR NAMES:
-                 If the assistant asks for the user's name or who they are speaking with, and the user responds with a single word or name (e.g., "นัท", "John", "Nattagan"), extract that word as "customer_name" with high confidence.
-                 
-                 CRITICAL PRIVACY RULE:
-                 Do not extract sensitive personal identifiers like passwords, bank account numbers, credit cards, or personal health records. Keep extraction strictly to real estate business needs.
-                 
-                 CONVERSATION HISTORY:
-                 ${chatCtx}
-                 
-                 Return ONLY a JSON object containing newly found or updated fields. Each field must be an object with keys "v" (value), "c" (confidence score, float between 0.0 and 1.0), and "s" (source: either "directly_stated" or "inferred").
-                 Allowed fields and their types for "v":
-                 - "customer_name" (string)
-                 - "phone" (string)
-                 - "age" (number)
-                 - "language" (string: e.g. "Thai", "English", "Chinese", "Japanese")
-                 - "purpose" (string: "living" or "investment")
-                 - "budget" (number, budget in THB)
-                 - "location" (string, e.g. "Ari", "Asok", "Thonglor")
-                 - "property_type" (string: "condo", "house", "townhouse", "commercial")
-                 - "payment_type" (string: "rent", "sale")
-                 
-                 If nothing is found, return {}.`,
-                 config: { responseMimeType: "application/json", temperature: 0.1 }
+
+              const exResult = await anthropic.messages.create({
+                model: "claude-haiku-4-5-20251001",
+                max_tokens: 512,
+                temperature: 0.1,
+                system: `You are a precise real estate CRM data extractor.
+Analyze the entire conversation context to extract customer profile details.
+
+CRITICAL SEMANTIC MATCHING FOR NAMES:
+If the assistant asks for the user's name and the user responds with a single word or name (e.g., "นัท", "John", "Nattagan"), extract that as "customer_name" with high confidence.
+
+CRITICAL PRIVACY RULE:
+Do not extract passwords, bank accounts, credit cards, or health records.
+
+Return ONLY a valid JSON object. Each field must be an object with keys "v" (value), "c" (confidence 0.0–1.0), and "s" ("directly_stated" or "inferred").
+Allowed fields: customer_name (string), phone (string), age (number), language (string), purpose ("living"|"investment"), budget (number THB), location (string), property_type ("condo"|"house"|"townhouse"|"commercial"), payment_type ("rent"|"sale").
+If nothing found, return {}.`,
+                messages: [{ role: "user", content: `CONVERSATION HISTORY:\n${chatCtx}` }],
               });
-              if (exResult.text) {
-                aiExtractedProfile = JSON.parse(exResult.text);
+
+              const rawText = exResult.content[0]?.type === "text" ? exResult.content[0].text : "";
+              if (rawText) {
+                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                if (jsonMatch) aiExtractedProfile = JSON.parse(jsonMatch[0]);
               }
             } catch(e) {
               console.error("AI Profile Extraction Error:", e);
@@ -407,7 +398,7 @@ export const Route = createFileRoute("/api/chat")({
                 .from("chat_sessions")
                 .select("questionnaire")
                 .eq("questionnaire->>phone", currentQ.phone)
-                .neq("id", activeSessionId)
+                .neq("id", activeSessionId ?? "")
                 .limit(1);
 
               if (matchedSessions && matchedSessions.length > 0) {
@@ -491,7 +482,7 @@ export const Route = createFileRoute("/api/chat")({
             }
           }
 
-          // 6. Build Gemini System Prompt
+          // 6. Build Claude System Prompt
           let filterNote = "";
           if (nearbyFallback) {
             filterNote = "IMPORTANT: You couldn't find an exact match in their requested area/type, so you are recommending similar or nearby properties instead. Politely explain this.";
@@ -562,54 +553,39 @@ ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเ
 
               let fullResponse = "";
               try {
-                const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY });
+                const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-                // Format history for Gemini
-                const history = messages.slice(0, -1).map((m) => ({
-                  role: m.role === "assistant" ? "model" : "user",
-                  parts: [{ text: m.content }],
+                // Format history for Claude (user/assistant alternating)
+                const history: Anthropic.MessageParam[] = messages.slice(0, -1).map((m) => ({
+                  role: m.role as "user" | "assistant",
+                  content: m.content,
                 }));
 
                 if (process.env.NODE_ENV === "development") {
-                  console.log(`[Dev] AI Request started for session: ${activeSessionId}`);
+                  console.log(`[Dev] Claude request started for session: ${activeSessionId}`);
                   console.log(`[Dev] Extracted Filters:`, newFilters);
                 }
 
-                // Try primary model, fallback to gemini-2.0-flash on 503
-                const MODELS = ["gemini-2.0-flash", "gemini-2.5-flash"];
-                let responseStream: AsyncIterable<any> | null = null;
-                let lastErr: any = null;
-                for (const model of MODELS) {
-                  try {
-                    responseStream = await ai.models.generateContentStream({
-                      model,
-                      contents: [...history, { role: "user", parts: [{ text: userText }] }],
-                      config: { systemInstruction: SYSTEM_PROMPT, temperature: 0.7 },
-                    });
-                    if (process.env.NODE_ENV === "development") console.log(`[Dev] Using model: ${model}`);
-                    break;
-                  } catch (e: any) {
-                    lastErr = e;
-                    const isOverloaded = e?.status === 503 || e?.message?.includes("503") || e?.message?.includes("high demand") || e?.message?.includes("UNAVAILABLE");
-                    if (isOverloaded) {
-                      console.warn(`[Dev] ${model} overloaded, trying next model...`);
-                      continue;
-                    }
-                    throw e;
-                  }
-                }
-                if (!responseStream) throw lastErr;
-
                 let detectedAiLocation: string | null = null;
 
-                for await (const chunk of responseStream) {
-                  const text = chunk.text;
-                  if (text) {
+                const claudeStream = anthropic.messages.stream({
+                  model: "claude-sonnet-4-6",
+                  max_tokens: 1024,
+                  system: SYSTEM_PROMPT,
+                  messages: [...history, { role: "user", content: userText }],
+                });
+
+                for await (const event of claudeStream) {
+                  if (
+                    event.type === "content_block_delta" &&
+                    event.delta.type === "text_delta"
+                  ) {
+                    const text = event.delta.text;
                     fullResponse += text;
                     const textEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
                     controller.enqueue(enc.encode(textEvent));
 
-                    // On-the-fly AI recommendation detection
+                    // On-the-fly location detection
                     if (!newFilters.area && !detectedAiLocation) {
                       const aiExtracted = localExtractFilters(fullResponse);
                       if (aiExtracted.filters.area) {
@@ -621,7 +597,7 @@ ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเ
                   }
                 }
               } catch (err: any) {
-                console.warn("Gemini unavailable, using rule-based fallback:", (err as any)?.status);
+                console.warn("Claude unavailable, using rule-based fallback:", (err as any)?.status);
 
                 // Build rule-based response — never show error to customer
                 const top3 = properties.slice(0, 3);
