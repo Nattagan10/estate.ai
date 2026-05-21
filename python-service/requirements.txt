@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+anthropic
+python-dotenv
+numpy
+pandas
+faiss-cpu
+FlagEmbedding
+supabase

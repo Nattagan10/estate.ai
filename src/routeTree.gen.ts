@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiRagChatRouteImport } from './routes/api/rag-chat'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 
 const LoginRoute = LoginRouteImport.update({
@@ -29,6 +30,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRagChatRoute = ApiRagChatRouteImport.update({
+  id: '/api/rag-chat',
+  path: '/api/rag-chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
@@ -40,12 +46,14 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/rag-chat': typeof ApiRagChatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/rag-chat': typeof ApiRagChatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/rag-chat': typeof ApiRagChatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/login' | '/api/chat'
+  fullPaths: '/' | '/admin' | '/login' | '/api/chat' | '/api/rag-chat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/login' | '/api/chat'
-  id: '__root__' | '/' | '/admin' | '/login' | '/api/chat'
+  to: '/' | '/admin' | '/login' | '/api/chat' | '/api/rag-chat'
+  id: '__root__' | '/' | '/admin' | '/login' | '/api/chat' | '/api/rag-chat'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +76,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   LoginRoute: typeof LoginRoute
   ApiChatRoute: typeof ApiChatRoute
+  ApiRagChatRoute: typeof ApiRagChatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -92,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/rag-chat': {
+      id: '/api/rag-chat'
+      path: '/api/rag-chat'
+      fullPath: '/api/rag-chat'
+      preLoaderRoute: typeof ApiRagChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/chat': {
       id: '/api/chat'
       path: '/api/chat'
@@ -107,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   LoginRoute: LoginRoute,
   ApiChatRoute: ApiChatRoute,
+  ApiRagChatRoute: ApiRagChatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
