@@ -3,14 +3,9 @@ import type { Property } from "@/data/properties";
 export type Filters = {
   area?: string;
   propertyType?: Property["propertyType"] | "Any";
-  listingType?: Property["listingType"] | "Any";
   minPrice?: number;
   maxPrice?: number;
-  bedrooms?: number;
   nearTransit?: boolean;
-  nearUniversity?: boolean;
-  nearMall?: boolean;
-  availability?: Property["availability"];
 };
 
 export function formatPrice(p: Pick<Property, "price" | "listingType">): string {

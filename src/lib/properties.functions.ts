@@ -7,14 +7,9 @@ import { rowToProperty, type DbPropertyRow, type Property } from "@/data/propert
 const FiltersSchema = z.object({
   area: z.string().optional(),
   propertyType: z.enum(["condo", "house", "townhouse", "commercial", "Any"]).optional(),
-  listingType: z.enum(["rent", "sale", "Any"]).optional(),
   minPrice: z.number().optional(),
   maxPrice: z.number().optional(),
-  bedrooms: z.number().int().min(0).max(10).optional(),
   nearTransit: z.boolean().optional(),
-  nearUniversity: z.boolean().optional(),
-  nearMall: z.boolean().optional(),
-  availability: z.enum(["available", "reserved", "sold"]).optional(),
   limit: z.number().int().min(1).max(500).optional(),
 });
 export type SearchFilters = z.infer<typeof FiltersSchema>;

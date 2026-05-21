@@ -19,11 +19,7 @@ import {
   Store,
   BellPlus,
   DollarSign,
-  BedDouble,
   Train,
-  GraduationCap,
-  ShoppingBag,
-  Tag,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { ChatPanel } from "@/components/ChatPanel";
@@ -191,16 +187,6 @@ function Index() {
         label: PROPERTY_TYPE_LABEL[filters.propertyType],
         clear: () => setFilters({ ...filters, propertyType: undefined }),
       });
-    if (filters.listingType && filters.listingType !== "Any")
-      chips.push({
-        label: `For ${filters.listingType}`,
-        clear: () => setFilters({ ...filters, listingType: undefined }),
-      });
-    if (filters.bedrooms != null)
-      chips.push({
-        label: `${filters.bedrooms}+ bed`,
-        clear: () => setFilters({ ...filters, bedrooms: undefined }),
-      });
     if (filters.maxPrice != null)
       chips.push({
         label: `≤ ฿${filters.maxPrice.toLocaleString()}`,
@@ -215,16 +201,6 @@ function Index() {
       chips.push({
         label: "Near BTS/MRT",
         clear: () => setFilters({ ...filters, nearTransit: undefined }),
-      });
-    if (filters.nearUniversity)
-      chips.push({
-        label: "Near University",
-        clear: () => setFilters({ ...filters, nearUniversity: undefined }),
-      });
-    if (filters.nearMall)
-      chips.push({
-        label: "Near Mall",
-        clear: () => setFilters({ ...filters, nearMall: undefined }),
       });
     return chips;
   }, [filters]);
@@ -249,7 +225,7 @@ function Index() {
             <div>
               <div className="font-serif text-lg font-semibold leading-tight">Estate AI</div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                Bangkok · 450 listings · AI
+                Bangkok · 53,466 listings · AI
               </div>
             </div>
           </div>
@@ -413,57 +389,6 @@ function Index() {
             </PopoverContent>
           </Popover>
 
-          {/* Bedrooms */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60">
-                <BedDouble className="h-4 w-4" />
-                {filtersDraft.bedrooms != null ? `${filtersDraft.bedrooms}+ bed` : "Bedrooms"}
-                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent style={{ zIndex: 1000 }} align="start" className="w-[260px] p-3">
-              <div className="mb-2 text-sm font-semibold">Minimum bedrooms</div>
-              <div className="flex flex-wrap gap-1.5">
-                {[0, 1, 2, 3, 4, 5].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() =>
-                      setFiltersDraft({ ...filtersDraft, bedrooms: filtersDraft.bedrooms === n ? undefined : n })
-                    }
-                    className={`h-9 min-w-12 rounded-full border px-3 text-sm font-medium ${filtersDraft.bedrooms === n ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
-                  >
-                    {n === 0 ? "Any" : `${n}+`}
-                  </button>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          {/* Listing type */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60">
-                <Tag className="h-4 w-4" />
-                {filtersDraft.listingType && filtersDraft.listingType !== "Any"
-                  ? `For ${filtersDraft.listingType}`
-                  : "For rent / sale"}
-                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent style={{ zIndex: 1000 }} align="start" className="w-[200px] p-2">
-              {(["Any", "rent", "sale"] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setFiltersDraft({ ...filtersDraft, listingType: v })}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-secondary/60 ${(filtersDraft.listingType ?? "Any") === v ? "font-semibold" : ""}`}
-                >
-                  {v === "Any" ? "Any" : `For ${v}`}
-                </button>
-              ))}
-            </PopoverContent>
-          </Popover>
-
           {/* Near transit */}
           <button
             onClick={() =>
@@ -474,30 +399,6 @@ function Index() {
             <Train className="h-4 w-4" />
             Near BTS / MRT
             {filtersDraft.nearTransit && <span className="h-1.5 w-1.5 rounded-full bg-destructive" />}
-          </button>
-
-          {/* Near university */}
-          <button
-            onClick={() =>
-              setFiltersDraft({ ...filtersDraft, nearUniversity: filtersDraft.nearUniversity ? undefined : true })
-            }
-            className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-sm ${filtersDraft.nearUniversity ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
-          >
-            <GraduationCap className="h-4 w-4" />
-            Near university
-            {filtersDraft.nearUniversity && <span className="h-1.5 w-1.5 rounded-full bg-destructive" />}
-          </button>
-
-          {/* Near mall */}
-          <button
-            onClick={() =>
-              setFiltersDraft({ ...filtersDraft, nearMall: filtersDraft.nearMall ? undefined : true })
-            }
-            className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-sm ${filtersDraft.nearMall ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
-          >
-            <ShoppingBag className="h-4 w-4" />
-            Near mall
-            {filtersDraft.nearMall && <span className="h-1.5 w-1.5 rounded-full bg-destructive" />}
           </button>
 
           {/* Apply button */}
@@ -681,7 +582,7 @@ function Index() {
 
       <footer className="border-t border-border bg-card/50 py-6">
         <div className="mx-auto max-w-[1600px] px-6 text-center text-xs text-muted-foreground">
-          Estate AI · Demo prototype · 450 mock Bangkok listings
+          Estate AI · 53,466 Bangkok listings · AI
         </div>
       </footer>
 

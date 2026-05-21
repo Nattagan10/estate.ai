@@ -121,15 +121,6 @@ function localExtractFilters(text: string): ExtractionResult {
   )
     next.propertyType = "commercial";
 
-  if (t.match(/\b(rent|rental|lease|เช่า|租|賃貸)\b/i) || t.includes("เช่า"))
-    next.listingType = "rent";
-  if (
-    t.match(/\b(sale|buy|purchase|ซื้อ|ขาย|买|購入)\b/i) ||
-    t.includes("ขาย") ||
-    t.includes("ซื้อ")
-  )
-    next.listingType = "sale";
-
   const maxPriceMatch =
     t.match(/(?:under|max|<|ไม่เกิน|งบ|budget|ราคา)[\s:=]*([\d,]+)[k,]*(\d*)/i) ||
     t.match(/\b(\d{1,3}(?:,\d{3})+)\b/) ||
@@ -147,19 +138,8 @@ function localExtractFilters(text: string): ExtractionResult {
     if (val > 0) next.maxPrice = val;
   }
 
-  const bedMatch =
-    t.match(/(\d+)\s*bed/i) ||
-    t.match(/(\d+)\s*ห้องนอน/) ||
-    t.match(/(\d+)\s*居室/) ||
-    t.match(/(\d+)\s*LDK/i);
-  if (bedMatch) {
-    next.bedrooms = parseInt(bedMatch[1], 10);
-  }
-
   if (t.match(/\b(bts|mrt|transit|train|รถไฟฟ้า|地铁|駅)\b/i) || t.includes("รถไฟ"))
     next.nearTransit = true;
-  if (t.match(/\b(university|chula|kaset|มหาลัย|มหาวิทยาลัย|大学)\b/i)) next.nearUniversity = true;
-  if (t.match(/\b(mall|shopping|paragon|iconsiam|ห้าง|商场|ショッピング)\b/i)) next.nearMall = true;
 
   // Age
   const ageMatch =
@@ -357,9 +337,6 @@ If nothing found, return {}.`,
           }
           if (newFilters.propertyType) {
             mergeProfileField(currentQ, "property_type", newFilters.propertyType, 1.0, "directly_stated");
-          }
-          if (newFilters.listingType) {
-            mergeProfileField(currentQ, "payment_type", newFilters.listingType, 1.0, "directly_stated");
           }
           mergeProfileField(currentQ, "language", detectedLang, 1.0, "inferred");
 
