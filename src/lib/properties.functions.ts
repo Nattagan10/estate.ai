@@ -32,53 +32,35 @@ const PROPERTY_TYPE_MAP: Record<string, string[]> = {
   commercial: ["commercial", "retail", "office", "shophouse"],
 };
 
-function applyFilters(query: any, f: SearchFilters) {
-  let q = query;
-
-  if (f.area) {
-    q = q.or(
-      `name.ilike.%${f.area}%,neighborhood.ilike.%${f.area}%,district.ilike.%${f.area}%,province.ilike.%${f.area}%`,
-    );
-  }
-
-  if (f.propertyTypes && f.propertyTypes.length > 0) {
-    const orClauses = f.propertyTypes
-      .flatMap((t) => (PROPERTY_TYPE_MAP[t] ?? [t]).map((k) => `property_type.ilike.%${k}%`))
-      .join(",");
-    q = q.or(orClauses);
-  } else if (f.propertyType && f.propertyType !== "Any") {
-    const keywords = PROPERTY_TYPE_MAP[f.propertyType] ?? [f.propertyType];
-    const orClauses = keywords.map((k) => `property_type.ilike.%${k}%`).join(",");
-    q = q.or(orClauses);
-  }
-
-  if (f.minPrice != null) q = q.gte("price_thb", f.minPrice);
-  if (f.maxPrice != null) q = q.lte("price_thb", f.maxPrice);
-
-  if (f.nearTransit) q = q.not("near_transit", "is", null);
-
-  return q;
+function buildTypeKeywords(f: SearchFilters): string[] | null {
+  if (f.propertyTypes && f.propertyTypes.length > 0)
+    return f.propertyTypes.flatMap((t) => PROPERTY_TYPE_MAP[t] ?? [t]);
+  if (f.propertyType && f.propertyType !== "Any")
+    return PROPERTY_TYPE_MAP[f.propertyType] ?? [f.propertyType];
+  return null;
 }
 
 export async function searchPropertiesServer(
   filters: SearchFilters,
 ): Promise<{ properties: Property[]; total: number }> {
   const f = FiltersSchema.parse(filters ?? {});
-  const pageSize = f.limit ?? 50;
-  const from = ((f.page ?? 1) - 1) * pageSize;
-  const to = from + pageSize - 1;
 
-  let query = supabaseAdmin
-    .from("rag_properties")
-    .select("*", { count: "estimated" })
-    .order("price_thb", { ascending: true, nullsFirst: false });
-
-  query = applyFilters(query, f);
-  const { data, error, count } = await query.range(from, to);
+  const { data, error } = await (supabaseAdmin as any).rpc("rpc_search_properties", {
+    p_area:           f.area ?? null,
+    p_property_types: buildTypeKeywords(f),
+    p_min_price:      f.minPrice ?? null,
+    p_max_price:      f.maxPrice ?? null,
+    p_near_transit:   f.nearTransit ?? false,
+    p_page:           f.page ?? 1,
+    p_limit:          f.limit ?? 50,
+  });
   if (error) throw new Error(error.message);
 
-  const rows = (data ?? []) as DbPropertyRow[];
-  return { properties: rows.map(rowToProperty), total: count ?? rows.length };
+  const result = (data as unknown) as { total: number; rows: DbPropertyRow[] };
+  return {
+    properties: (result.rows ?? []).map(rowToProperty),
+    total: result.total ?? 0,
+  };
 }
 
 export const searchProperties = createServerFn({ method: "POST" })
@@ -91,26 +73,17 @@ export const fetchMapPins = createServerFn({ method: "POST" })
   .inputValidator((data: SearchFilters) => FiltersSchema.parse(data ?? {}))
   .handler(async ({ data }): Promise<{ pins: MapPin[] }> => {
     const f = FiltersSchema.parse(data ?? {});
-    let query = supabaseAdmin
-      .from("rag_properties")
-      .select("id, name, latitude, longitude, price_thb, district, neighborhood")
-      .not("latitude", "is", null)
-      .not("longitude", "is", null);
 
-    query = applyFilters(query as any, f) as any;
-    const { data: rows, error } = await (query as any).limit(2000);
+    const { data: result, error } = await (supabaseAdmin as any).rpc("rpc_fetch_map_pins", {
+      p_area:           f.area ?? null,
+      p_property_types: buildTypeKeywords(f),
+      p_min_price:      f.minPrice ?? null,
+      p_max_price:      f.maxPrice ?? null,
+      p_near_transit:   f.nearTransit ?? false,
+    });
     if (error) throw new Error(error.message);
 
-    const pins: MapPin[] = (rows ?? []).map((r: any) => ({
-      id: r.id as string,
-      name: (r.name ?? r.district ?? "Property") as string,
-      lat: r.latitude as number,
-      lng: r.longitude as number,
-      price: (r.price_thb ?? 0) as number,
-      area_name: (r.neighborhood ?? r.district ?? "") as string,
-    }));
-
-    return { pins };
+    return { pins: ((result as unknown) as MapPin[]) ?? [] };
   });
 
 export const getAreaList = createServerFn({ method: "GET" }).handler(async () => {
