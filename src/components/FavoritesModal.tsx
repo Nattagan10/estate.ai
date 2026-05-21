@@ -123,13 +123,22 @@ export function FavoritesModal({ isOpen, onClose, favorites, onRemoveFavorite, o
         </div>
       </div>
 
-      <PropertyModal 
-        isOpen={!!selectedProperty} 
-        onClose={() => setSelectedProperty(null)} 
-        property={selectedProperty as ModalPropertyData} 
+      <PropertyModal
+        isOpen={!!selectedProperty}
+        onClose={() => setSelectedProperty(null)}
+        property={selectedProperty ? {
+          id: selectedProperty.id,
+          title: selectedProperty.name,
+          description: selectedProperty.description,
+          image: selectedProperty.image,
+          price: selectedProperty.price,
+          tags: selectedProperty.tags,
+          propertyType: selectedProperty.propertyType,
+          area_name: selectedProperty.area_name,
+        } : null}
         onViewMap={() => {
           if (selectedProperty) {
-            onClose(); // close favorites modal too
+            onClose();
             onViewMap?.(selectedProperty.id);
           }
         }}

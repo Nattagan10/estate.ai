@@ -19,15 +19,33 @@ const FiltersSchema = z.object({
 });
 export type SearchFilters = z.infer<typeof FiltersSchema>;
 
+const PROPERTY_TYPE_MAP: Record<string, string[]> = {
+  condo:      ["condo", "apartment", "condominium"],
+  house:      ["detached house", "semi-detached house", "villa", "bungalow"],
+  townhouse:  ["townhome", "townhouse"],
+  commercial: ["commercial", "retail", "office", "shophouse"],
+};
+
 function applyFilters(query: any, f: SearchFilters) {
   let q = query;
-  if (f.area) q = q.ilike("area_name", `%${f.area}%`);
-  if (f.propertyType && f.propertyType !== "Any") q = q.eq("property_type", f.propertyType);
-  if (f.listingType && f.listingType !== "Any") q = q.eq("listing_type", f.listingType);
-  if (f.minPrice != null) q = q.gte("price", f.minPrice);
-  if (f.maxPrice != null) q = q.lte("price", f.maxPrice);
-  if (f.bedrooms != null) q = q.gte("bedrooms", f.bedrooms);
-  if (f.availability) q = q.eq("availability_status", f.availability);
+
+  if (f.area) {
+    q = q.or(
+      `neighborhood.ilike.%${f.area}%,district.ilike.%${f.area}%,province.ilike.%${f.area}%`,
+    );
+  }
+
+  if (f.propertyType && f.propertyType !== "Any") {
+    const keywords = PROPERTY_TYPE_MAP[f.propertyType] ?? [f.propertyType];
+    const orClauses = keywords.map((k) => `property_type.ilike.%${k}%`).join(",");
+    q = q.or(orClauses);
+  }
+
+  if (f.minPrice != null) q = q.gte("price_thb", f.minPrice);
+  if (f.maxPrice != null) q = q.lte("price_thb", f.maxPrice);
+
+  if (f.nearTransit) q = q.not("near_transit", "is", null);
+
   return q;
 }
 
@@ -37,21 +55,16 @@ export async function searchPropertiesServer(
   const f = FiltersSchema.parse(filters ?? {});
   const limit = f.limit ?? 60;
 
-  let query = supabaseAdmin.from("properties").select("*", { count: "exact" });
+  let query = supabaseAdmin
+    .from("rag_properties")
+    .select("*", { count: "exact" })
+    .order("price_thb", { ascending: true });
+
   query = applyFilters(query, f);
   const { data, error, count } = await query.limit(limit);
   if (error) throw new Error(error.message);
 
-  let rows = (data ?? []) as DbPropertyRow[];
-  // Tag-based "near X" filters require post-filter on jsonb
-  const matchTransit = (p: DbPropertyRow) =>
-    (p.nearby ?? []).some((n) => n.type === "BTS" || n.type === "MRT");
-  const matchUni = (p: DbPropertyRow) => (p.nearby ?? []).some((n) => n.type === "University");
-  const matchMall = (p: DbPropertyRow) => (p.nearby ?? []).some((n) => n.type === "Mall");
-  if (f.nearTransit) rows = rows.filter(matchTransit);
-  if (f.nearUniversity) rows = rows.filter(matchUni);
-  if (f.nearMall) rows = rows.filter(matchMall);
-
+  const rows = (data ?? []) as DbPropertyRow[];
   return { properties: rows.map(rowToProperty), total: count ?? rows.length };
 }
 
@@ -62,32 +75,38 @@ export const searchProperties = createServerFn({ method: "POST" })
   });
 
 export const getAreaList = createServerFn({ method: "GET" }).handler(async () => {
-  const { data, error } = await supabaseAdmin.from("properties").select("area_name");
+  const { data, error } = await supabaseAdmin
+    .from("rag_properties")
+    .select("district")
+    .not("district", "is", null)
+    .limit(2000);
   if (error) throw new Error(error.message);
   const set = new Set<string>();
-  (data ?? []).forEach((r: { area_name: string }) => set.add(r.area_name));
+  (data ?? []).forEach((r: { district: string }) => r.district && set.add(r.district));
   return { areas: Array.from(set).sort() };
 });
 
 // ---- Admin CRUD ----
 
 const PropertyInput = z.object({
-  id: z.string().uuid().optional(),
+  id: z.string().optional(),
   name: z.string().min(1).max(200),
-  description: z.string().max(2000).default(""),
-  property_type: z.enum(["condo", "house", "townhouse", "commercial"]),
-  listing_type: z.enum(["rent", "sale"]),
-  price: z.number().nonnegative(),
-  bedrooms: z.number().int().min(0).max(20),
-  bathrooms: z.number().int().min(0).max(20),
-  area_sqm: z.number().nonnegative(),
-  area_name: z.string().min(1).max(100),
-  lat: z.number(),
-  lng: z.number(),
-  address: z.string().max(300).default(""),
-  image_url: z.string().max(1000).default(""),
-  availability_status: z.enum(["available", "reserved", "sold"]).default("available"),
-  tags: z.array(z.string()).default([]),
+  property_type: z.string().default("Condo"),
+  province: z.string().max(100).default(""),
+  district: z.string().max(100).default(""),
+  neighborhood: z.string().max(100).default(""),
+  developer: z.string().max(200).default(""),
+  price_thb: z.number().nonnegative().default(0),
+  price_per_sqm: z.number().nonnegative().default(0),
+  year_built: z.number().int().optional(),
+  nbr_floors: z.number().int().optional(),
+  rental_yield: z.number().optional(),
+  near_transit: z.string().optional(),
+  amenities: z.array(z.string()).default([]),
+  url: z.string().max(1000).default(""),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  coord_accurate: z.boolean().default(false),
 });
 
 async function assertAdmin(userId: string) {
@@ -107,9 +126,9 @@ export const adminListProperties = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId);
     let q = supabaseAdmin
-      .from("properties")
+      .from("rag_properties")
       .select("*", { count: "exact" })
-      .order("updated_at", { ascending: false });
+      .order("created_at", { ascending: false });
     if (data.search) q = q.ilike("name", `%${data.search}%`);
     const { data: rows, count, error } = await q.limit(data.limit ?? 100);
     if (error) throw new Error(error.message);
@@ -121,14 +140,15 @@ export const adminUpsertProperty = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => PropertyInput.parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId);
+    const payload = { ...data, id: data.id ?? `MANUAL-${Date.now()}` };
     if (data.id) {
-      const { error } = await supabaseAdmin.from("properties").update(data).eq("id", data.id);
+      const { error } = await supabaseAdmin.from("rag_properties").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
       return { id: data.id };
     }
     const { data: ins, error } = await supabaseAdmin
-      .from("properties")
-      .insert(data)
+      .from("rag_properties")
+      .insert(payload)
       .select("id")
       .single();
     if (error) throw new Error(error.message);
@@ -137,10 +157,10 @@ export const adminUpsertProperty = createServerFn({ method: "POST" })
 
 export const adminDeleteProperty = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
+  .inputValidator((d: { id: string }) => z.object({ id: z.string() }).parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId);
-    const { error } = await supabaseAdmin.from("properties").delete().eq("id", data.id);
+    const { error } = await supabaseAdmin.from("rag_properties").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -150,7 +170,9 @@ export const adminGetAnalytics = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertAdmin(context.userId);
     const [props, sessions, logs] = await Promise.all([
-      supabaseAdmin.from("properties").select("area_name, property_type, price, listing_type"),
+      supabaseAdmin
+        .from("rag_properties")
+        .select("district, property_type, price_thb"),
       supabaseAdmin
         .from("chat_sessions")
         .select("id, questionnaire, created_at")
@@ -169,8 +191,8 @@ export const adminGetAnalytics = createServerFn({ method: "GET" })
     const byArea: Record<string, number> = {};
     const byType: Record<string, number> = {};
     (props.data ?? []).forEach((r: any) => {
-      byArea[r.area_name] = (byArea[r.area_name] ?? 0) + 1;
-      byType[r.property_type] = (byType[r.property_type] ?? 0) + 1;
+      if (r.district) byArea[r.district] = (byArea[r.district] ?? 0) + 1;
+      if (r.property_type) byType[r.property_type] = (byType[r.property_type] ?? 0) + 1;
     });
     return {
       counts: {
