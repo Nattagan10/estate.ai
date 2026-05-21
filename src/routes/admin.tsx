@@ -1,16 +1,32 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   adminListSessions,
   adminGetSessionLogs,
   adminLogin,
   adminDeleteSession,
+  adminListProperties,
+  adminUpsertProperty,
+  adminDeleteProperty,
+  type AdminPropertyRow,
 } from "@/lib/admin.functions";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { Building2, LogOut, MessageSquare, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  Building2,
+  Database,
+  LogOut,
+  MessageSquare,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +48,7 @@ const TOKEN_KEY = "estate_admin_token";
 
 function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"sessions" | "properties">("sessions");
 
   useEffect(() => {
     setToken(localStorage.getItem(TOKEN_KEY));
@@ -59,11 +76,29 @@ function AdminPage() {
             <div>
               <div className="font-serif text-lg font-semibold">Estate AI · Admin</div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                Live chat sessions
+                Dashboard
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex rounded-lg border border-border bg-secondary/30 p-0.5">
+              <button
+                onClick={() => setActiveTab("sessions")}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activeTab === "sessions" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <MessageSquare className="h-3.5 w-3.5" /> Chat Sessions
+              </button>
+              <button
+                onClick={() => setActiveTab("properties")}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activeTab === "properties" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Database className="h-3.5 w-3.5" /> Properties
+              </button>
+            </div>
             <Link to="/" className="text-xs text-muted-foreground hover:text-foreground">
               View site
             </Link>
@@ -81,7 +116,11 @@ function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-[1400px] px-6 py-6">
-        <SessionsView token={token} />
+        {activeTab === "sessions" ? (
+          <SessionsView token={token} />
+        ) : (
+          <PropertiesView token={token} />
+        )}
       </main>
     </div>
   );
@@ -342,6 +381,300 @@ function SessionsView({ token }: { token: string }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ---- Property Management ----
+
+const EMPTY_FORM: Omit<AdminPropertyRow, "id" | "created_at"> = {
+  name: "",
+  property_type: "Condo",
+  province: "Bangkok",
+  district: "",
+  neighborhood: "",
+  developer: "",
+  price_thb: 0,
+  price_per_sqm: 0,
+  url: "",
+  near_transit: "",
+  latitude: undefined,
+  longitude: undefined,
+  coord_accurate: false,
+};
+
+function PropertiesView({ token }: { token: string }) {
+  const listFn = useServerFn(adminListProperties);
+  const upsertFn = useServerFn(adminUpsertProperty);
+  const deleteFn = useServerFn(adminDeleteProperty);
+  const qc = useQueryClient();
+
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [editRow, setEditRow] = useState<AdminPropertyRow | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<Omit<AdminPropertyRow, "id" | "created_at">>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const { data, isFetching, refetch } = useQuery({
+    queryKey: ["admin-properties", debouncedSearch],
+    queryFn: () => listFn({ data: { token, search: debouncedSearch || undefined, limit: 100 } }),
+    staleTime: 10_000,
+  });
+
+  const rows = data?.rows ?? [];
+
+  const handleSearchChange = (v: string) => {
+    setSearch(v);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(v), 400);
+  };
+
+  const openAdd = () => {
+    setEditRow(null);
+    setForm(EMPTY_FORM);
+    setShowForm(true);
+  };
+
+  const openEdit = (row: AdminPropertyRow) => {
+    setEditRow(row);
+    setForm({
+      name: row.name ?? "",
+      property_type: row.property_type ?? "Condo",
+      province: row.province ?? "Bangkok",
+      district: row.district ?? "",
+      neighborhood: row.neighborhood ?? "",
+      developer: row.developer ?? "",
+      price_thb: row.price_thb ?? 0,
+      price_per_sqm: row.price_per_sqm ?? 0,
+      url: row.url ?? "",
+      near_transit: row.near_transit ?? "",
+      latitude: row.latitude,
+      longitude: row.longitude,
+      coord_accurate: row.coord_accurate ?? false,
+    });
+    setShowForm(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await upsertFn({ data: { token, property: { ...form, id: editRow?.id } } });
+      toast.success(editRow ? "Property updated" : "Property added");
+      setShowForm(false);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this property? This cannot be undone.")) return;
+    setDeleting(id);
+    try {
+      await deleteFn({ data: { token, id } });
+      toast.success("Property deleted");
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Delete failed");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const field = (
+    label: string,
+    key: keyof typeof form,
+    type: "text" | "number" = "text",
+    opts?: { placeholder?: string; step?: string },
+  ) => (
+    <div className="space-y-1">
+      <label className="block text-xs font-medium text-muted-foreground">{label}</label>
+      <input
+        type={type}
+        step={opts?.step}
+        placeholder={opts?.placeholder}
+        value={(form[key] as any) ?? ""}
+        onChange={(e) =>
+          setForm((f) => ({
+            ...f,
+            [key]: type === "number" ? (e.target.value === "" ? undefined : Number(e.target.value)) : e.target.value,
+          }))
+        }
+        className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+      />
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Search by name…"
+            className="w-full rounded-lg border border-input bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {isFetching ? "Loading…" : `${data?.total ?? 0} total`}
+        </span>
+        <button
+          onClick={() => refetch()}
+          className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-card hover:bg-secondary"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+        </button>
+        <button
+          onClick={openAdd}
+          className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Property
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-secondary/30 text-left text-xs text-muted-foreground">
+                <th className="px-4 py-3 font-medium">Name</th>
+                <th className="px-4 py-3 font-medium">Type</th>
+                <th className="px-4 py-3 font-medium">District</th>
+                <th className="px-4 py-3 font-medium">Price (THB)</th>
+                <th className="px-4 py-3 font-medium">Near Transit</th>
+                <th className="px-4 py-3 font-medium w-20">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((row) => (
+                <tr key={row.id} className="hover:bg-secondary/20">
+                  <td className="max-w-[220px] truncate px-4 py-2.5 font-medium">{row.name}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground">{row.property_type}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground">{row.district || "—"}</td>
+                  <td className="px-4 py-2.5">
+                    {row.price_thb ? `฿${Number(row.price_thb).toLocaleString()}` : "—"}
+                  </td>
+                  <td className="max-w-[140px] truncate px-4 py-2.5 text-muted-foreground text-xs">
+                    {row.near_transit || "—"}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => openEdit(row)}
+                        className="grid h-7 w-7 place-items-center rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(row.id)}
+                        disabled={deleting === row.id}
+                        className="grid h-7 w-7 place-items-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && !isFetching && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-xs text-muted-foreground">
+                    No properties found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-card shadow-xl">
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <h2 className="font-serif text-lg font-semibold">
+                {editRow ? "Edit Property" : "Add Property"}
+              </h2>
+              <button
+                onClick={() => setShowForm(false)}
+                className="grid h-7 w-7 place-items-center rounded-lg hover:bg-secondary"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSave} className="p-6 space-y-4">
+              {field("Name *", "name", "text", { placeholder: "e.g. The Line Asok-Ratchada" })}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-muted-foreground">Property Type</label>
+                  <select
+                    value={form.property_type}
+                    onChange={(e) => setForm((f) => ({ ...f, property_type: e.target.value }))}
+                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="Condo">Condo</option>
+                    <option value="Condominium">Condominium</option>
+                    <option value="Apartment">Apartment</option>
+                    <option value="Detached House">Detached House</option>
+                    <option value="Townhouse">Townhouse</option>
+                    <option value="Commercial">Commercial</option>
+                  </select>
+                </div>
+                {field("Developer", "developer", "text", { placeholder: "e.g. SC Asset" })}
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                {field("Province", "province", "text", { placeholder: "Bangkok" })}
+                {field("District", "district", "text", { placeholder: "e.g. Watthana" })}
+                {field("Neighborhood", "neighborhood", "text", { placeholder: "e.g. Asok" })}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {field("Price (THB)", "price_thb", "number", { placeholder: "0" })}
+                {field("Price/sqm (THB)", "price_per_sqm", "number", { placeholder: "0" })}
+              </div>
+              {field("Near Transit", "near_transit", "text", { placeholder: "e.g. BTS Asok 200m" })}
+              <div className="grid grid-cols-2 gap-4">
+                {field("Latitude", "latitude", "number", { step: "any", placeholder: "13.7373" })}
+                {field("Longitude", "longitude", "number", { step: "any", placeholder: "100.5601" })}
+              </div>
+              {field("Listing URL", "url", "text", { placeholder: "https://..." })}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="coord_accurate"
+                  checked={form.coord_accurate ?? false}
+                  onChange={(e) => setForm((f) => ({ ...f, coord_accurate: e.target.checked }))}
+                  className="rounded border-input"
+                />
+                <label htmlFor="coord_accurate" className="text-sm">Coordinates are accurate</label>
+              </div>
+              <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="rounded-lg border border-border bg-card px-4 py-2 text-sm hover:bg-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !form.name.trim()}
+                  className="rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {saving ? "Saving…" : editRow ? "Save Changes" : "Add Property"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

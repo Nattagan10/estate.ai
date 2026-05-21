@@ -55,7 +55,8 @@ export const Route = createFileRoute("/")({
 function Index() {
   const [filters, setFilters] = useState<Filters>({});
   const [filtersDraft, setFiltersDraft] = useState<Filters>({});
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [favoriteItems, setFavoriteItems] = useState<Property[]>([]);
+  const favorites = useMemo(() => new Set(favoriteItems.map((p) => p.id)), [favoriteItems]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [chatKey, setChatKey] = useState(0);
@@ -67,6 +68,13 @@ function Index() {
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
 
   const typesApplied = new Set<Property["propertyType"]>(filters.propertyTypes ?? []);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("estate_favorites");
+      if (saved) setFavoriteItems(JSON.parse(saved));
+    } catch {}
+  }, []);
 
   useEffect(() => {
     setFiltersDraft(filters);
@@ -89,13 +97,6 @@ function Index() {
   const search = useServerFn(searchProperties);
   const mapSearch = useServerFn(fetchMapPins);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["properties", filters, page],
-    queryFn: () => search({ data: { ...filters, page, limit: ITEMS_PER_PAGE } }),
-    placeholderData: (prev) => prev,
-    staleTime: 30_000,
-  });
-
   const hasActiveFilters = !!(
     filters.area ||
     (filters.propertyTypes && filters.propertyTypes.length > 0) ||
@@ -104,6 +105,14 @@ function Index() {
     filters.maxPrice != null ||
     filters.nearTransit
   );
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["properties", filters, page],
+    queryFn: () => search({ data: { ...filters, page, limit: ITEMS_PER_PAGE } }),
+    enabled: hasActiveFilters,
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+  });
 
   const { data: mapData } = useQuery({
     queryKey: ["map-pins", filters],
@@ -119,7 +128,7 @@ function Index() {
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
   const paginatedResults = results;
-  const favoriteProperties = results.filter(p => favorites.has(p.id));
+  const favoriteProperties = favoriteItems;
 
   const handlePageChange = (p: number) => {
     setIsTransitioning(true);
@@ -221,13 +230,19 @@ function Index() {
     return chips;
   }, [filters]);
 
-  const toggleFavorite = (id: string) =>
-    setFavorites((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
+  const toggleFavorite = (id: string) => {
+    setFavoriteItems((prev) => {
+      let updated: Property[];
+      if (prev.some((p) => p.id === id)) {
+        updated = prev.filter((p) => p.id !== id);
+      } else {
+        const prop = results.find((p) => p.id === id);
+        updated = prop ? [...prev, prop] : prev;
+      }
+      try { localStorage.setItem("estate_favorites", JSON.stringify(updated)); } catch {}
+      return updated;
     });
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -264,13 +279,15 @@ function Index() {
       </header>
 
       <HeroCarousel />
-      <PropertyRow 
-        properties={results.slice(0, 15)} 
-        onViewMap={(id) => {
-          handleSelectProperty(id);
-          document.getElementById('map-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }}
-      />
+      {results.length > 0 && (
+        <PropertyRow
+          properties={results.slice(0, 15)}
+          onViewMap={(id) => {
+            handleSelectProperty(id);
+            document.getElementById('map-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }}
+        />
+      )}
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 md:px-6 md:py-8">
         <div className="mb-4 flex items-center gap-3">
@@ -502,15 +519,31 @@ function Index() {
 
             <div>
               <div className="mb-3 flex items-baseline justify-between">
-                <h2 className="font-serif text-xl font-semibold">Recommended for you</h2>
-                <span className="text-xs text-muted-foreground">
-                  {isLoading ? "Loading…" : `Showing ${(page - 1) * ITEMS_PER_PAGE + 1}–${Math.min(page * ITEMS_PER_PAGE, total)} of ${total.toLocaleString()}`}
-                </span>
+                <h2 className="font-serif text-xl font-semibold">
+                  {hasActiveFilters ? "Results" : "Search properties"}
+                </h2>
+                {hasActiveFilters && (
+                  <span className="text-xs text-muted-foreground">
+                    {isLoading
+                      ? "Loading…"
+                      : `Showing ${(page - 1) * ITEMS_PER_PAGE + 1}–${Math.min(page * ITEMS_PER_PAGE, total)} of ${total.toLocaleString()}`}
+                  </span>
+                )}
               </div>
-              {results.length === 0 && !isLoading ? (
+              {!hasActiveFilters ? (
+                <div className="rounded-2xl border border-dashed border-border bg-card p-14 text-center">
+                  <Sparkles className="mx-auto mb-3 h-8 w-8 text-muted-foreground/40" />
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Search by location, project name, or chat with the AI assistant
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground/60">
+                    53,466 Bangkok listings ready to explore
+                  </p>
+                </div>
+              ) : results.length === 0 && !isLoading ? (
                 <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
                   <p className="text-sm text-muted-foreground">
-                    No properties match yet. Try refining your request in the chat.
+                    No properties match. Try adjusting your filters.
                   </p>
                   <button
                     onClick={() => setFilters({})}
