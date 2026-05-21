@@ -61,48 +61,43 @@ function Index() {
   const [chatKey, setChatKey] = useState(0);
   const [locationInput, setLocationInput] = useState("");
   const [typeDraft, setTypeDraft] = useState<Set<Property["propertyType"]>>(new Set());
-  const [typesApplied, setTypesApplied] = useState<Set<Property["propertyType"]>>(new Set());
   const [typeOpen, setTypeOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
 
+  const typesApplied = new Set<Property["propertyType"]>(filters.propertyTypes ?? []);
+
   useEffect(() => {
     setFiltersDraft(filters);
+    setTypeDraft(new Set(filters.propertyTypes ?? []));
   }, [filters]);
 
   useEffect(() => {
-    setTypeDraft(new Set(typesApplied));
-  }, [typesApplied]);
-
-  useEffect(() => {
     setPage(1);
-  }, [filters, typesApplied]);
+  }, [filters]);
 
   // Session is auto-created server-side on first chat message and returned via SSE.
   const startNewChat = () => {
     setSessionId(null);
     setFilters({});
-    setTypesApplied(new Set());
+    setTypeDraft(new Set());
     setChatKey((k) => k + 1);
   };
 
+  const ITEMS_PER_PAGE = 50;
   const search = useServerFn(searchProperties);
   const { data, isLoading } = useQuery({
-    queryKey: ["properties", filters],
-    queryFn: () => search({ data: { ...filters, limit: 450 } }),
+    queryKey: ["properties", filters, page],
+    queryFn: () => search({ data: { ...filters, page, limit: ITEMS_PER_PAGE } }),
     placeholderData: (prev) => prev,
   });
 
-  const allResults = data?.properties ?? [];
-  const results =
-    typesApplied.size > 0 ? allResults.filter((p) => typesApplied.has(p.propertyType)) : allResults;
-  const total = typesApplied.size > 0 ? results.length : (data?.total ?? 0);
-  const favoriteProperties = allResults.filter(p => favorites.has(p.id));
-
-  const ITEMS_PER_PAGE = 50;
-  const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE);
-  const paginatedResults = results.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const results = data?.properties ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
+  const paginatedResults = results;
+  const favoriteProperties = results.filter(p => favorites.has(p.id));
 
   const handlePageChange = (p: number) => {
     setIsTransitioning(true);
@@ -132,29 +127,31 @@ function Index() {
   ];
   const typeCounts = useMemo(() => {
     const m: Record<string, number> = {};
-    allResults.forEach((p) => {
+    results.forEach((p) => {
       m[p.propertyType] = (m[p.propertyType] ?? 0) + 1;
     });
     return m;
-  }, [allResults]);
+  }, [results]);
 
   const isFiltersDirty = useMemo(() => {
     const allKeys = new Set([...Object.keys(filters), ...Object.keys(filtersDraft)]) as Set<keyof Filters>;
     for (const key of allKeys) {
-      if (filters[key] !== filtersDraft[key]) {
-        return true;
-      }
+      if (key === "propertyTypes") continue;
+      if (filters[key] !== filtersDraft[key]) return true;
     }
-    if (typeDraft.size !== typesApplied.size) return true;
+    const applied = new Set(filters.propertyTypes ?? []);
+    if (typeDraft.size !== applied.size) return true;
     for (const val of typeDraft) {
-      if (!typesApplied.has(val)) return true;
+      if (!applied.has(val)) return true;
     }
     return false;
-  }, [filters, filtersDraft, typeDraft, typesApplied]);
+  }, [filters, filtersDraft, typeDraft]);
 
   const handleApplyAllFilters = () => {
-    setFilters(filtersDraft);
-    setTypesApplied(new Set(typeDraft));
+    setFilters({
+      ...filtersDraft,
+      propertyTypes: typeDraft.size > 0 ? Array.from(typeDraft) : undefined,
+    });
   };
 
   const toggleTypeDraft = (v: Property["propertyType"]) => {
@@ -168,9 +165,7 @@ function Index() {
   const applyTypeFilters = () => {
     setTypeOpen(false);
   };
-  const clearTypeFilters = () => {
-    setTypeDraft(new Set());
-  };
+  const clearTypeFilters = () => setTypeDraft(new Set());
   const applyLocation = () => {
     setFilters({ ...filters, area: locationInput.trim() || undefined });
   };
@@ -249,7 +244,7 @@ function Index() {
 
       <HeroCarousel />
       <PropertyRow 
-        properties={allResults.slice(0, 15)} 
+        properties={results.slice(0, 15)} 
         onViewMap={(id) => {
           handleSelectProperty(id);
           document.getElementById('map-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -488,7 +483,7 @@ function Index() {
               <div className="mb-3 flex items-baseline justify-between">
                 <h2 className="font-serif text-xl font-semibold">Recommended for you</h2>
                 <span className="text-xs text-muted-foreground">
-                  {isLoading ? "Loading…" : `Showing ${(page - 1) * ITEMS_PER_PAGE + 1}-${Math.min(page * ITEMS_PER_PAGE, results.length)} of ${total}`}
+                  {isLoading ? "Loading…" : `Showing ${(page - 1) * ITEMS_PER_PAGE + 1}–${Math.min(page * ITEMS_PER_PAGE, total)} of ${total.toLocaleString()}`}
                 </span>
               </div>
               {results.length === 0 && !isLoading ? (
@@ -530,26 +525,26 @@ function Index() {
                         Prev
                       </Button>
                       <div className="flex items-center gap-1">
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
-                          if (p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1)) {
-                            return (
+                        {[1, page - 1, page, page + 1, totalPages]
+                          .filter((p, i, arr) => p >= 1 && p <= totalPages && arr.indexOf(p) === i)
+                          .sort((a, b) => a - b)
+                          .map((p, i, arr) => (
+                            <>
+                              {i > 0 && arr[i - 1] < p - 1 && (
+                                <span key={`dots-${p}`} className="text-muted-foreground px-1">…</span>
+                              )}
                               <Button
                                 key={p}
                                 variant={p === page ? "default" : "ghost"}
                                 size="sm"
-                                className={`h-8 w-8 p-0 rounded-full ${p === page ? 'shadow-md' : ''}`}
+                                className={`h-8 w-8 p-0 rounded-full ${p === page ? "shadow-md" : ""}`}
                                 onClick={() => handlePageChange(p)}
                                 disabled={isTransitioning}
                               >
                                 {p}
                               </Button>
-                            );
-                          }
-                          if (p === page - 2 || p === page + 2) {
-                            return <span key={p} className="text-muted-foreground px-1">...</span>;
-                          }
-                          return null;
-                        })}
+                            </>
+                          ))}
                       </div>
                       <Button
                         variant="outline"

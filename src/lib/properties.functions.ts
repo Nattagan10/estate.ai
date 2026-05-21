@@ -7,10 +7,12 @@ import { rowToProperty, type DbPropertyRow, type Property } from "@/data/propert
 const FiltersSchema = z.object({
   area: z.string().optional(),
   propertyType: z.enum(["condo", "house", "townhouse", "commercial", "Any"]).optional(),
+  propertyTypes: z.array(z.enum(["condo", "house", "townhouse", "commercial"])).optional(),
   minPrice: z.number().optional(),
   maxPrice: z.number().optional(),
   nearTransit: z.boolean().optional(),
-  limit: z.number().int().min(1).max(500).optional(),
+  page: z.number().int().min(1).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
 });
 export type SearchFilters = z.infer<typeof FiltersSchema>;
 
@@ -30,7 +32,12 @@ function applyFilters(query: any, f: SearchFilters) {
     );
   }
 
-  if (f.propertyType && f.propertyType !== "Any") {
+  if (f.propertyTypes && f.propertyTypes.length > 0) {
+    const orClauses = f.propertyTypes
+      .flatMap((t) => (PROPERTY_TYPE_MAP[t] ?? [t]).map((k) => `property_type.ilike.%${k}%`))
+      .join(",");
+    q = q.or(orClauses);
+  } else if (f.propertyType && f.propertyType !== "Any") {
     const keywords = PROPERTY_TYPE_MAP[f.propertyType] ?? [f.propertyType];
     const orClauses = keywords.map((k) => `property_type.ilike.%${k}%`).join(",");
     q = q.or(orClauses);
@@ -48,15 +55,17 @@ export async function searchPropertiesServer(
   filters: SearchFilters,
 ): Promise<{ properties: Property[]; total: number }> {
   const f = FiltersSchema.parse(filters ?? {});
-  const limit = f.limit ?? 60;
+  const pageSize = f.limit ?? 50;
+  const from = ((f.page ?? 1) - 1) * pageSize;
+  const to = from + pageSize - 1;
 
   let query = supabaseAdmin
     .from("rag_properties")
     .select("*", { count: "exact" })
-    .order("price_thb", { ascending: true });
+    .order("price_thb", { ascending: true, nullsFirst: false });
 
   query = applyFilters(query, f);
-  const { data, error, count } = await query.limit(limit);
+  const { data, error, count } = await query.range(from, to);
   if (error) throw new Error(error.message);
 
   const rows = (data ?? []) as DbPropertyRow[];

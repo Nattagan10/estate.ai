@@ -3,6 +3,7 @@ import type { Property } from "@/data/properties";
 export type Filters = {
   area?: string;
   propertyType?: Property["propertyType"] | "Any";
+  propertyTypes?: Property["propertyType"][];
   minPrice?: number;
   maxPrice?: number;
   nearTransit?: boolean;
