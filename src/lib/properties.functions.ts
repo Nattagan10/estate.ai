@@ -16,6 +16,15 @@ const FiltersSchema = z.object({
 });
 export type SearchFilters = z.infer<typeof FiltersSchema>;
 
+export type MapPin = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  price: number;
+  area_name: string;
+};
+
 const PROPERTY_TYPE_MAP: Record<string, string[]> = {
   condo:      ["condo", "apartment", "condominium"],
   house:      ["detached house", "semi-detached house", "villa", "bungalow"],
@@ -61,7 +70,7 @@ export async function searchPropertiesServer(
 
   let query = supabaseAdmin
     .from("rag_properties")
-    .select("*", { count: "exact" })
+    .select("*", { count: "estimated" })
     .order("price_thb", { ascending: true, nullsFirst: false });
 
   query = applyFilters(query, f);
@@ -76,6 +85,32 @@ export const searchProperties = createServerFn({ method: "POST" })
   .inputValidator((data: SearchFilters) => FiltersSchema.parse(data ?? {}))
   .handler(async ({ data }) => {
     return searchPropertiesServer(data);
+  });
+
+export const fetchMapPins = createServerFn({ method: "POST" })
+  .inputValidator((data: SearchFilters) => FiltersSchema.parse(data ?? {}))
+  .handler(async ({ data }): Promise<{ pins: MapPin[] }> => {
+    const f = FiltersSchema.parse(data ?? {});
+    let query = supabaseAdmin
+      .from("rag_properties")
+      .select("id, name, latitude, longitude, price_thb, district, neighborhood")
+      .not("latitude", "is", null)
+      .not("longitude", "is", null);
+
+    query = applyFilters(query as any, f) as any;
+    const { data: rows, error } = await (query as any).limit(2000);
+    if (error) throw new Error(error.message);
+
+    const pins: MapPin[] = (rows ?? []).map((r: any) => ({
+      id: r.id as string,
+      name: (r.name ?? r.district ?? "Property") as string,
+      lat: r.latitude as number,
+      lng: r.longitude as number,
+      price: (r.price_thb ?? 0) as number,
+      area_name: (r.neighborhood ?? r.district ?? "") as string,
+    }));
+
+    return { pins };
   });
 
 export const getAreaList = createServerFn({ method: "GET" }).handler(async () => {

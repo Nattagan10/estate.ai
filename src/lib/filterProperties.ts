@@ -9,7 +9,7 @@ export type Filters = {
   nearTransit?: boolean;
 };
 
-export function formatPrice(p: Pick<Property, "price" | "listingType">): string {
+export function formatPrice(p: { price?: number | null }): string {
   if (!p.price) return "ราคาตามตกลง";
   if (p.price >= 1_000_000) return `฿${(p.price / 1_000_000).toFixed(1)}M`;
   return `฿${p.price.toLocaleString()}`;

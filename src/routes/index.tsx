@@ -28,7 +28,7 @@ import { HeroCarousel } from "@/components/HeroCarousel";
 import { PropertyRow } from "@/components/PropertyRow";
 import { FavoritesModal } from "@/components/FavoritesModal";
 import { PROPERTY_TYPE_LABEL, type Filters } from "@/lib/filterProperties";
-import { searchProperties } from "@/lib/properties.functions";
+import { searchProperties, fetchMapPins } from "@/lib/properties.functions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -87,11 +87,23 @@ function Index() {
 
   const ITEMS_PER_PAGE = 50;
   const search = useServerFn(searchProperties);
+  const mapSearch = useServerFn(fetchMapPins);
+
   const { data, isLoading } = useQuery({
     queryKey: ["properties", filters, page],
     queryFn: () => search({ data: { ...filters, page, limit: ITEMS_PER_PAGE } }),
     placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
+
+  const { data: mapData } = useQuery({
+    queryKey: ["map-pins", filters],
+    queryFn: () => mapSearch({ data: { ...filters } }),
+    placeholderData: (prev) => prev,
+    staleTime: 60_000,
+  });
+
+  const mapPins = mapData?.pins ?? [];
 
   const results = data?.properties ?? [];
   const total = data?.total ?? 0;
@@ -108,14 +120,13 @@ function Index() {
 
   const handleSelectProperty = (id: string) => {
     setFocusedId(id);
-    const index = results.findIndex((p) => p.id === id);
-    if (index !== -1) {
-      const targetPage = Math.floor(index / ITEMS_PER_PAGE) + 1;
-      if (targetPage !== page) {
-        setIsTransitioning(true);
-        setPage(targetPage);
-        setTimeout(() => setIsTransitioning(false), 300);
-      }
+    // If the selected property is not on the current page, go to page 1 so the user
+    // can see the card list update — the map pin is already highlighted regardless.
+    const onCurrentPage = results.some((p) => p.id === id);
+    if (!onCurrentPage && page !== 1) {
+      setIsTransitioning(true);
+      setPage(1);
+      setTimeout(() => setIsTransitioning(false), 300);
     }
   };
 
@@ -447,7 +458,7 @@ function Index() {
                   }
                 >
                   <PropertyMap
-                    properties={results}
+                    properties={mapPins}
                     focusedId={focusedId}
                     highlightArea={filters.area ?? null}
                     onSelect={handleSelectProperty}

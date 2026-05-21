@@ -7,8 +7,8 @@ import {
   InfoWindow,
   Pin,
 } from "@vis.gl/react-google-maps";
-import type { Property } from "@/data/properties";
 import { formatPrice } from "@/lib/filterProperties";
+import type { MapPin } from "@/lib/properties.functions";
 
 const AREA_CENTERS: Record<string, { lat: number; lng: number; radius: number }> = {
   Asok: { lat: 13.7373, lng: 100.5601, radius: 900 },
@@ -42,7 +42,7 @@ function MapController({
   focusedId,
   highlightArea,
 }: {
-  properties: Property[];
+  properties: MapPin[];
   focusedId: string | null;
   highlightArea?: string | null;
 }) {
@@ -117,7 +117,7 @@ export function PropertyMap({
   highlightArea,
   onSelect,
 }: {
-  properties: Property[];
+  properties: MapPin[];
   focusedId: string | null;
   highlightArea?: string | null;
   onSelect: (id: string) => void;
