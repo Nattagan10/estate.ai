@@ -15,6 +15,73 @@ type ExtractionResult = {
   purpose?: string;
 };
 
+const THAI_DIGITS: Record<string, number> = {
+  หนึ่ง: 1, สอง: 2, สาม: 3, สี่: 4, ห้า: 5,
+  หก: 6, เจ็ด: 7, แปด: 8, เก้า: 9, สิบ: 10,
+  ยี่สิบ: 20, สามสิบ: 30, สี่สิบ: 40, ห้าสิบ: 50,
+};
+
+function parseBudget(text: string): number | null {
+  const t = text.toLowerCase();
+  const dw = Object.keys(THAI_DIGITS).join("|");
+
+  // 1. Numeric M/m suffix: "1.5M", "3m", "2.5 M"
+  const mNum = t.match(/\b(\d+(?:\.\d+)?)\s*m\b/i);
+  if (mNum) return parseFloat(mNum[1]) * 1_000_000;
+
+  // 2. Thai million patterns: สองล้าน, ล้านครึ่ง, สองล้านห้า, สามล้านห้าแสน
+  const lRx = new RegExp(
+    `(${dw}|\\d+(?:\\.\\d+)?)?\\s*ล้าน(ครึ่ง|(${dw}|\\d+(?:\\.\\d+)?)\\s*(แสน|หมื่น|พัน)?)?`
+  );
+  const lMatch = t.match(lRx);
+  if (lMatch) {
+    const whole = lMatch[1] ? (THAI_DIGITS[lMatch[1]] ?? parseFloat(lMatch[1]) ?? 1) : 1;
+    let frac = 0;
+    if (lMatch[2] === "ครึ่ง") {
+      frac = 500_000;
+    } else if (lMatch[3]) {
+      const n = THAI_DIGITS[lMatch[3]] ?? parseFloat(lMatch[3]) ?? 0;
+      const unit = lMatch[4];
+      frac = n * (unit === "แสน" ? 100_000 : unit === "หมื่น" ? 10_000 : unit === "พัน" ? 1_000 : 100_000);
+    }
+    return whole * 1_000_000 + frac;
+  }
+
+  // 3. Thai แสน patterns: ห้าแสน=500k, สามแสน=300k
+  const sRx = new RegExp(`(${dw}|\\d+)\\s*แสน`);
+  const sMatch = t.match(sRx);
+  if (sMatch) {
+    const n = THAI_DIGITS[sMatch[1]] ?? parseFloat(sMatch[1]) ?? 0;
+    return n * 100_000;
+  }
+
+  // 4. Thai หมื่น patterns: ห้าหมื่น=50k
+  const hmRx = new RegExp(`(${dw}|\\d+)\\s*หมื่น`);
+  const hmMatch = t.match(hmRx);
+  if (hmMatch) {
+    const n = THAI_DIGITS[hmMatch[1]] ?? parseFloat(hmMatch[1]) ?? 0;
+    return n * 10_000;
+  }
+
+  // 5. Legacy numeric patterns
+  const numMatch =
+    t.match(/(?:under|max|<|ไม่เกิน|งบ|budget|ราคา)[\s:=]*([\d,]+)[k,]*(\d*)/i) ||
+    t.match(/\b(\d{1,3}(?:,\d{3})+)\b/) ||
+    t.match(/\b(\d{2,})k\b/i) ||
+    t.match(/(\d+(?:\.\d+)?)\s*万/);
+  if (numMatch) {
+    let valStr = numMatch[1];
+    if (numMatch[2]) valStr += numMatch[2];
+    valStr = valStr.replace(/,/g, "");
+    let val = parseFloat(valStr);
+    if (t.includes(valStr + "k") || val < 1000) val *= 1000;
+    if (t.includes("万")) val *= 10_000;
+    if (val > 0) return val;
+  }
+
+  return null;
+}
+
 function localExtractFilters(text: string): ExtractionResult {
   const t = text.toLowerCase();
   const next: SearchFilters = {};
@@ -169,22 +236,8 @@ function localExtractFilters(text: string): ExtractionResult {
   )
     next.propertyType = "commercial";
 
-  const maxPriceMatch =
-    t.match(/(?:under|max|<|ไม่เกิน|งบ|budget|ราคา)[\s:=]*([\d,]+)[k,]*(\d*)/i) ||
-    t.match(/\b(\d{1,3}(?:,\d{3})+)\b/) ||
-    t.match(/\b(\d{2,})k\b/i) ||
-    t.match(/(\d+(?:\.\d+)?)\s*万/);
-  if (maxPriceMatch) {
-    let valStr = maxPriceMatch[1];
-    if (maxPriceMatch[2]) valStr += maxPriceMatch[2];
-    valStr = valStr.replace(/,/g, "");
-    let val = parseFloat(valStr);
-
-    if (t.includes(valStr + "k") || val < 1000) val *= 1000;
-    if (t.includes("万")) val *= 10000;
-
-    if (val > 0) next.maxPrice = val;
-  }
+  const budget = parseBudget(text);
+  if (budget !== null && budget > 0) next.maxPrice = budget;
 
   if (t.match(/\b(bts|mrt|transit|train|รถไฟฟ้า|地铁|駅)\b/i) || t.includes("รถไฟ"))
     next.nearTransit = true;
