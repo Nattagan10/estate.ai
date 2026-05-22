@@ -6,6 +6,7 @@ export async function streamChat({
   messages,
   filters,
   sessionId,
+  signal,
   onFilters,
   onDelta,
   onDone,
@@ -14,6 +15,7 @@ export async function streamChat({
   messages: ChatMsg[];
   filters?: Filters;
   sessionId?: string | null;
+  signal?: AbortSignal;
   onFilters?: (data: { filters: Filters; total: number; sessionId?: string | null }) => void;
   onDelta: (chunk: string) => void;
   onDone: () => void;
@@ -24,6 +26,7 @@ export async function streamChat({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages, filters: filters ?? {}, sessionId: sessionId ?? null }),
+      signal,
     });
 
     if (!resp.ok || !resp.body) {
@@ -87,6 +90,10 @@ export async function streamChat({
     }
     onDone();
   } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      onDone();
+      return;
+    }
     onError(e instanceof Error ? e.message : "Unknown error");
   }
 }

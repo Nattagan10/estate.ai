@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Send, Sparkles, Building2, Plus } from "lucide-react";
+import { Send, Sparkles, Building2, Plus, X, Square } from "lucide-react";
 import { streamChat, type ChatMsg } from "@/lib/streamChat";
 import { toast } from "sonner";
 import type { Filters } from "@/lib/filterProperties";
+import { PROPERTY_TYPE_LABEL } from "@/lib/filterProperties";
 
 const QUICK = [
   "Find condos near Asok BTS",
@@ -34,12 +35,13 @@ export function ChatPanel({
       role: "assistant",
       content:
         initialAssistantMessage ??
-        "Hi! I'm **Estate AI**. Tell me about the area, budget or vibe you want and I'll narrow down 450 Bangkok listings instantly.",
+        "Hi! I'm **Estate AI**. Tell me about the area, budget or vibe you want and I'll narrow down 53,466 Bangkok listings instantly.",
     },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -53,11 +55,14 @@ export function ChatPanel({
     setInput("");
     setBusy(true);
 
+    const abort = new AbortController();
+    abortRef.current = abort;
     let acc = "";
     await streamChat({
       messages: next,
       filters,
       sessionId,
+      signal: abort.signal,
       onFilters: ({ filters: f, total, sessionId: sid }) => {
         onFiltersChange(f);
         onTotalChange?.(total);
@@ -77,13 +82,34 @@ export function ChatPanel({
           return [...prev, { role: "assistant", content: acc }];
         });
       },
-      onDone: () => setBusy(false),
+      onDone: () => { setBusy(false); abortRef.current = null; },
       onError: (err) => {
         setBusy(false);
+        abortRef.current = null;
         toast.error(err);
       },
     });
   };
+
+  const cancel = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setBusy(false);
+  };
+
+  const activeChips: { label: string; clear: () => void }[] = [];
+  if (filters.area)
+    activeChips.push({ label: `📍 ${filters.area}`, clear: () => onFiltersChange({ ...filters, area: undefined }) });
+  if (filters.propertyType && filters.propertyType !== "Any")
+    activeChips.push({ label: PROPERTY_TYPE_LABEL[filters.propertyType], clear: () => onFiltersChange({ ...filters, propertyType: undefined }) });
+  if (filters.propertyTypes?.length)
+    activeChips.push({ label: filters.propertyTypes.map(t => PROPERTY_TYPE_LABEL[t]).join(", "), clear: () => onFiltersChange({ ...filters, propertyTypes: undefined }) });
+  if (filters.maxPrice != null)
+    activeChips.push({ label: `≤ ฿${filters.maxPrice.toLocaleString()}`, clear: () => onFiltersChange({ ...filters, maxPrice: undefined }) });
+  if (filters.minPrice != null)
+    activeChips.push({ label: `≥ ฿${filters.minPrice.toLocaleString()}`, clear: () => onFiltersChange({ ...filters, minPrice: undefined }) });
+  if (filters.nearTransit)
+    activeChips.push({ label: "🚇 Near BTS/MRT", clear: () => onFiltersChange({ ...filters, nearTransit: undefined }) });
 
   return (
     <div
@@ -142,6 +168,27 @@ export function ChatPanel({
         )}
       </div>
 
+      {activeChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-border bg-background/50 px-4 py-2.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Active filters</span>
+          {activeChips.map((c) => (
+            <button
+              key={c.label}
+              onClick={c.clear}
+              className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/20 transition"
+            >
+              {c.label} <X className="h-3 w-3" />
+            </button>
+          ))}
+          <button
+            onClick={() => onFiltersChange({})}
+            className="ml-auto text-[11px] text-muted-foreground hover:text-foreground transition"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
       {messages.length <= 2 && (
         <div className="flex flex-wrap gap-1.5 border-t border-border bg-background/50 px-4 py-3">
           {QUICK.map((q) => (
@@ -170,14 +217,25 @@ export function ChatPanel({
           className="flex-1 rounded-full border border-border bg-background px-4 py-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
           disabled={busy}
         />
-        <button
-          type="submit"
-          disabled={busy || !input.trim()}
-          className="grid h-10 w-10 place-items-center rounded-full bg-primary text-primary-foreground transition hover:scale-105 disabled:opacity-40"
-          aria-label="Send"
-        >
-          <Send className="h-4 w-4" />
-        </button>
+        {busy ? (
+          <button
+            type="button"
+            onClick={cancel}
+            className="grid h-10 w-10 place-items-center rounded-full bg-destructive text-destructive-foreground transition hover:scale-105"
+            aria-label="Cancel"
+          >
+            <Square className="h-4 w-4 fill-current" />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!input.trim()}
+            className="grid h-10 w-10 place-items-center rounded-full bg-primary text-primary-foreground transition hover:scale-105 disabled:opacity-40"
+            aria-label="Send"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        )}
       </form>
     </div>
   );
