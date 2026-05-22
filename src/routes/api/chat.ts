@@ -644,8 +644,6 @@ ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเ
                   console.log(`[Dev] Extracted Filters:`, newFilters);
                 }
 
-                let detectedAiLocation: string | null = null;
-
                 const claudeStream = anthropic.messages.stream({
                   model: "claude-sonnet-4-6",
                   max_tokens: 1024,
@@ -662,16 +660,6 @@ ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเ
                     fullResponse += text;
                     const textEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
                     controller.enqueue(enc.encode(textEvent));
-
-                    // On-the-fly location detection
-                    if (!newFilters.area && !detectedAiLocation) {
-                      const aiExtracted = localExtractFilters(fullResponse);
-                      if (aiExtracted.filters.area) {
-                        detectedAiLocation = aiExtracted.filters.area;
-                        const filterEvent = `event: filters\ndata: ${JSON.stringify({ filters: { ...newFilters, area: detectedAiLocation }, total, sessionId: activeSessionId })}\n\n`;
-                        controller.enqueue(enc.encode(filterEvent));
-                      }
-                    }
                   }
                 }
               } catch (err: any) {
