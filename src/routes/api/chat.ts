@@ -633,11 +633,15 @@ ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเ
               try {
                 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-                // Format history for Claude (user/assistant alternating)
-                const history: Anthropic.MessageParam[] = messages.slice(0, -1).map((m) => ({
-                  role: m.role as "user" | "assistant",
-                  content: m.content,
-                }));
+                // Send only the last 20 messages to Claude to avoid token limits
+                const MAX_HISTORY = 20;
+                const history: Anthropic.MessageParam[] = messages
+                  .slice(0, -1)
+                  .slice(-MAX_HISTORY)
+                  .map((m) => ({
+                    role: m.role as "user" | "assistant",
+                    content: m.content,
+                  }));
 
                 if (process.env.NODE_ENV === "development") {
                   console.log(`[Dev] Claude request started for session: ${activeSessionId}`);
