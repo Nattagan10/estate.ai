@@ -7,10 +7,14 @@ import type { Filters } from "@/lib/filterProperties";
 import { PROPERTY_TYPE_LABEL } from "@/lib/filterProperties";
 
 const QUICK = [
+  "คอนโดแถวสุขุมวิท งบ 3 ล้าน",
+  "บ้านเดี่ยวใกล้เกษตร",
+  "เช่าคอนโดใกล้รถไฟฟ้า",
+  "ทาวน์เฮ้าส์แถวลาดพร้าว",
   "Find condos near Asok BTS",
-  "House near Kasetsart University",
-  "Luxury rental in Thonglor under 80k",
-  "2 bedroom condo in Ari for sale",
+  "2 bed condo in Thonglor for sale",
+  "Rental condo near BTS under 30k",
+  "House in Lat Phrao budget 5M",
 ];
 
 export function ChatPanel({
