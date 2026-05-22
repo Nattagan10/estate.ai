@@ -49,6 +49,8 @@ export function ChatPanel({
   });
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [lastUserText, setLastUserText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -62,6 +64,8 @@ export function ChatPanel({
 
   const send = async (text: string) => {
     if (!text.trim() || busy) return;
+    setLastUserText(text);
+    setHasError(false);
     const userMsg: ChatMsg = { role: "user", content: text };
     const next = [...messages, userMsg];
     setMessages(next);
@@ -99,6 +103,7 @@ export function ChatPanel({
       onError: () => {
         setBusy(false);
         abortRef.current = null;
+        setHasError(true);
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (last?.role === "assistant" && last.content?.trim()) {
@@ -192,6 +197,16 @@ export function ChatPanel({
             <div className="rounded-2xl rounded-bl-sm bg-secondary px-4 py-2.5 text-sm italic text-muted-foreground">
               <span className="typing-ellipsis">typing</span>
             </div>
+          </div>
+        )}
+        {hasError && lastUserText && (
+          <div className="flex justify-center">
+            <button
+              onClick={() => send(lastUserText)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-destructive/40 bg-destructive/10 px-4 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/20 transition"
+            >
+              ↩ ลองอีกครั้ง
+            </button>
           </div>
         )}
       </div>
