@@ -483,24 +483,14 @@ If nothing found, return {}.`,
                 const matched = matchedSessions[0];
                 if (matched && matched.questionnaire) {
                   const oldQ = matched.questionnaire as Record<string, any>;
-                  const fieldsToMerge = [
-                    "customer_name",
-                    "phone",
-                    "age",
-                    "language",
-                    "purpose",
-                    "budget",
-                    "location",
-                    "property_type",
-                    "payment_type",
-                  ];
-                  for (const f of fieldsToMerge) {
-                    if (oldQ[f] && (!currentQ[f] || currentQ[f] === "")) {
-                      currentQ[f] = oldQ[f];
-                      if (oldQ.metadata?.[f]) {
-                        if (!currentQ.metadata) currentQ.metadata = {};
-                        currentQ.metadata[f] = oldQ.metadata[f];
-                      }
+                  // Only carry over the name — preferences (age, budget, purpose etc.)
+                  // are session-specific and must not bleed across sessions or users
+                  // who share a phone number (e.g. family members).
+                  if (oldQ.customer_name && !currentQ.customer_name) {
+                    currentQ.customer_name = oldQ.customer_name;
+                    if (oldQ.metadata?.customer_name) {
+                      if (!currentQ.metadata) currentQ.metadata = {};
+                      currentQ.metadata.customer_name = oldQ.metadata.customer_name;
                     }
                   }
                 }
