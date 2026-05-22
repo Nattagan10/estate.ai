@@ -30,14 +30,20 @@ export function ChatPanel({
   onTotalChange?: (n: number) => void;
   initialAssistantMessage?: string;
 }) {
-  const [messages, setMessages] = useState<ChatMsg[]>([
-    {
+  const [messages, setMessages] = useState<ChatMsg[]>(() => {
+    try {
+      const saved = localStorage.getItem("estate_chat_messages");
+      if (saved) {
+        const parsed: ChatMsg[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [{
       role: "assistant",
-      content:
-        initialAssistantMessage ??
+      content: initialAssistantMessage ??
         "Hi! I'm **Estate AI**. Tell me about the area, budget or vibe you want and I'll narrow down 53,466 Bangkok listings instantly.",
-    },
-  ]);
+    }];
+  });
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,6 +52,10 @@ export function ChatPanel({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
+
+  useEffect(() => {
+    try { localStorage.setItem("estate_chat_messages", JSON.stringify(messages)); } catch {}
+  }, [messages]);
 
   const send = async (text: string) => {
     if (!text.trim() || busy) return;
