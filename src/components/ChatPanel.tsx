@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Send, Sparkles, Building2, Plus, X, Square } from "lucide-react";
 import { streamChat, type ChatMsg } from "@/lib/streamChat";
-import { toast } from "sonner";
 import type { Filters } from "@/lib/filterProperties";
 import { PROPERTY_TYPE_LABEL } from "@/lib/filterProperties";
 
@@ -97,10 +96,25 @@ export function ChatPanel({
         });
       },
       onDone: () => { setBusy(false); abortRef.current = null; },
-      onError: (err) => {
+      onError: () => {
         setBusy(false);
         abortRef.current = null;
-        toast.error(err);
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant" && last.content?.trim()) {
+            // partial response already visible — append interrupted note
+            return prev.map((m, i) =>
+              i === prev.length - 1
+                ? { ...m, content: m.content + "\n\n_ขออภัยค่ะ การตอบกลับถูกขัดจังหวะ กรุณาลองส่งใหม่อีกครั้งนะคะ_" }
+                : m
+            );
+          }
+          // no content yet — add fresh error bubble
+          return [
+            ...prev,
+            { role: "assistant" as const, content: "ขออภัยค่ะ เกิดข้อผิดพลาด กรุณาลองส่งข้อความใหม่อีกครั้งนะคะ" },
+          ];
+        });
       },
     });
   };
