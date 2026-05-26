@@ -11,15 +11,17 @@ import {
   X,
   ShieldCheck,
   Search,
-  SlidersHorizontal,
   ChevronDown,
-  ChevronRight,
   Home,
   Building,
   Store,
   BellPlus,
   DollarSign,
   Train,
+  TrendingUp,
+  CalendarDays,
+  ArrowUpDown,
+  Check,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { ChatPanel } from "@/components/ChatPanel";
@@ -65,11 +67,13 @@ function Index() {
   const [locationInput, setLocationInput] = useState("");
   const [typeDraft, setTypeDraft] = useState<Set<Property["propertyType"]>>(new Set());
   const [typeOpen, setTypeOpen] = useState(false);
+  const [priceOpen, setPriceOpen] = useState(false);
+  const [yearOpen, setYearOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
-
-  const typesApplied = new Set<Property["propertyType"]>(filters.propertyTypes ?? []);
+  const [ragResults, setRagResults] = useState<Property[] | null>(null);
 
   useEffect(() => {
     try {
@@ -103,6 +107,7 @@ function Index() {
     setSessionId(null);
     setFilters({});
     setTypeDraft(new Set());
+    setRagResults(null);
     setChatKey((k) => k + 1);
   };
 
@@ -116,7 +121,10 @@ function Index() {
     (filters.propertyType && filters.propertyType !== "Any") ||
     filters.minPrice != null ||
     filters.maxPrice != null ||
-    filters.nearTransit
+    filters.nearTransit ||
+    filters.minYearBuilt != null ||
+    filters.hasYield ||
+    filters.sortBy
   );
 
   const { data, isLoading } = useQuery({
@@ -163,11 +171,35 @@ function Index() {
   };
 
   const typeOptions: { value: Property["propertyType"]; label: string; icon: any }[] = [
-    { value: "house", label: "Single-Family House", icon: Home },
-    { value: "condo", label: "Condo / Apartment", icon: Building },
-    { value: "townhouse", label: "Townhouse", icon: Building2 },
-    { value: "commercial", label: "Commercial", icon: Store },
+    { value: "condo", label: "คอนโด / อพาร์ตเมนต์", icon: Building },
+    { value: "house", label: "บ้านเดี่ยว", icon: Home },
+    { value: "townhouse", label: "ทาวน์เฮ้าส์", icon: Building2 },
+    { value: "commercial", label: "อาคารพาณิชย์", icon: Store },
   ];
+
+  const PRICE_PRESETS: { label: string; min?: number; max?: number }[] = [
+    { label: "< 1M",    max: 1_000_000 },
+    { label: "1–3M",    min: 1_000_000,  max: 3_000_000 },
+    { label: "3–5M",    min: 3_000_000,  max: 5_000_000 },
+    { label: "5–10M",   min: 5_000_000,  max: 10_000_000 },
+    { label: "10M+",    min: 10_000_000 },
+  ];
+
+  const YEAR_PRESETS: { label: string; minYear?: number }[] = [
+    { label: "ทุกช่วง" },
+    { label: "ใหม่ (2022+)",    minYear: 2022 },
+    { label: "ล่าสุด (2018+)",  minYear: 2018 },
+    { label: "ก่อน 2018",       minYear: undefined },
+  ];
+
+  const SORT_OPTIONS: { label: string; value: Filters["sortBy"] | undefined; icon: string }[] = [
+    { label: "Best match",         value: undefined,       icon: "✨" },
+    { label: "ราคา: ต่ำ → สูง",   value: "price_asc",     icon: "↑" },
+    { label: "ราคา: สูง → ต่ำ",   value: "price_desc",    icon: "↓" },
+    { label: "สร้างใหม่ที่สุด",   value: "newest",        icon: "🏗️" },
+    { label: "ผลตอบแทนสูงสุด",    value: "yield",         icon: "📈" },
+  ];
+
   const typeCounts = useMemo(() => {
     const m: Record<string, number> = {};
     results.forEach((p) => {
@@ -193,6 +225,7 @@ function Index() {
   const handleApplyAllFilters = () => {
     setFilters({
       ...filtersDraft,
+      area: locationInput.trim() || filtersDraft.area,
       propertyTypes: typeDraft.size > 0 ? Array.from(typeDraft) : undefined,
     });
   };
@@ -205,41 +238,55 @@ function Index() {
       return n;
     });
   };
-  const applyTypeFilters = () => {
-    setTypeOpen(false);
-  };
-  const clearTypeFilters = () => setTypeDraft(new Set());
   const applyLocation = () => {
     setFilters({ ...filters, area: locationInput.trim() || undefined });
   };
 
+  const setPricePreset = (min?: number, max?: number) => {
+    setFiltersDraft((d) => ({ ...d, minPrice: min, maxPrice: max }));
+  };
+
+  const activePricePreset = PRICE_PRESETS.find(
+    (p) => p.min === filtersDraft.minPrice && p.max === filtersDraft.maxPrice,
+  );
+
+  const activeYearPreset = filtersDraft.minYearBuilt === 2022
+    ? YEAR_PRESETS[1] : filtersDraft.minYearBuilt === 2018
+    ? YEAR_PRESETS[2] : YEAR_PRESETS[0];
+
+  const activeSortOption = SORT_OPTIONS.find((s) => s.value === filtersDraft.sortBy) ?? SORT_OPTIONS[0];
+
+  const priceLabel = (() => {
+    if (filtersDraft.minPrice != null && filtersDraft.maxPrice != null)
+      return `฿${(filtersDraft.minPrice/1e6).toFixed(0)}M – ฿${(filtersDraft.maxPrice/1e6).toFixed(0)}M`;
+    if (filtersDraft.minPrice != null)
+      return `฿${(filtersDraft.minPrice/1e6).toFixed(0)}M+`;
+    if (filtersDraft.maxPrice != null)
+      return `< ฿${(filtersDraft.maxPrice/1e6).toFixed(0)}M`;
+    return "ราคา";
+  })();
+
   const activeFilterChips = useMemo(() => {
     const chips: { label: string; clear: () => void }[] = [];
     if (filters.area)
-      chips.push({
-        label: `Area: ${filters.area}`,
-        clear: () => setFilters({ ...filters, area: undefined }),
-      });
-    if (filters.propertyType && filters.propertyType !== "Any")
-      chips.push({
-        label: PROPERTY_TYPE_LABEL[filters.propertyType],
-        clear: () => setFilters({ ...filters, propertyType: undefined }),
-      });
-    if (filters.maxPrice != null)
-      chips.push({
-        label: `≤ ฿${filters.maxPrice.toLocaleString()}`,
-        clear: () => setFilters({ ...filters, maxPrice: undefined }),
-      });
-    if (filters.minPrice != null)
-      chips.push({
-        label: `≥ ฿${filters.minPrice.toLocaleString()}`,
-        clear: () => setFilters({ ...filters, minPrice: undefined }),
-      });
+      chips.push({ label: `📍 ${filters.area}`, clear: () => setFilters({ ...filters, area: undefined }) });
+    if (filters.propertyTypes?.length)
+      chips.push({ label: filters.propertyTypes.map((t) => PROPERTY_TYPE_LABEL[t]).join(", "), clear: () => setFilters({ ...filters, propertyTypes: undefined }) });
+    if (filters.maxPrice != null || filters.minPrice != null) {
+      const min = filters.minPrice, max = filters.maxPrice;
+      const lbl = min != null && max != null ? `฿${(min/1e6).toFixed(0)}M–${(max/1e6).toFixed(0)}M`
+        : min != null ? `฿${(min/1e6).toFixed(0)}M+`
+        : `< ฿${(max!/1e6).toFixed(0)}M`;
+      chips.push({ label: lbl, clear: () => setFilters({ ...filters, minPrice: undefined, maxPrice: undefined }) });
+    }
     if (filters.nearTransit)
-      chips.push({
-        label: "Near BTS/MRT",
-        clear: () => setFilters({ ...filters, nearTransit: undefined }),
-      });
+      chips.push({ label: "🚇 ใกล้ BTS/MRT", clear: () => setFilters({ ...filters, nearTransit: undefined }) });
+    if (filters.minYearBuilt != null)
+      chips.push({ label: `🏗️ ${filters.minYearBuilt}+`, clear: () => setFilters({ ...filters, minYearBuilt: undefined }) });
+    if (filters.hasYield)
+      chips.push({ label: "📈 มี Yield", clear: () => setFilters({ ...filters, hasYield: undefined }) });
+    if (filters.sortBy)
+      chips.push({ label: `↕ ${SORT_OPTIONS.find(s => s.value === filters.sortBy)?.label ?? ""}`, clear: () => setFilters({ ...filters, sortBy: undefined }) });
     return chips;
   }, [filters]);
 
@@ -249,7 +296,7 @@ function Index() {
       if (prev.some((p) => p.id === id)) {
         updated = prev.filter((p) => p.id !== id);
       } else {
-        const prop = results.find((p) => p.id === id);
+        const prop = results.find((p) => p.id === id) ?? ragResults?.find((p) => p.id === id);
         updated = prop ? [...prev, prop] : prev;
       }
       try { localStorage.setItem("estate_favorites", JSON.stringify(updated)); } catch {}
@@ -260,30 +307,36 @@ function Index() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Toaster richColors position="top-center" />
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground">
+      <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-3.5">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
               <Building2 className="h-4 w-4" />
             </div>
             <div>
-              <div className="font-serif text-lg font-semibold leading-tight">Estate AI</div>
+              <div className="font-serif text-lg font-semibold leading-tight tracking-tight">Estate AI</div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                Bangkok · 53,466 listings · AI
+                Bangkok · 53,466 listings
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button 
+          <div className="hidden md:flex items-center gap-2 rounded-full border border-border bg-card/60 px-4 py-2 text-[11px] text-muted-foreground backdrop-blur">
+            <Sparkles className="h-3 w-3 text-amber-500" />
+            AI-powered property search
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <button
               onClick={() => setIsFavoritesOpen(true)}
-              className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-secondary/80 transition-colors"
+              className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-secondary transition-colors"
             >
-              <Heart className="h-3.5 w-3.5 text-destructive" /> {favorites.size}
+              <Heart className={`h-3.5 w-3.5 ${favorites.size > 0 ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+              <span>{favorites.size > 0 ? favorites.size : "Saved"}</span>
             </button>
             <Link
               to="/admin"
-              className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-accent"
+              className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-accent transition-colors"
             >
               <ShieldCheck className="h-3.5 w-3.5" /> Admin
             </Link>
@@ -303,171 +356,189 @@ function Index() {
       )}
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 md:px-6 md:py-8">
-        <div className="mb-4 flex items-center gap-3">
+        {/* Search row */}
+        <div className="mb-3 flex items-center gap-3">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={locationInput}
               onChange={(e) => setLocationInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") applyLocation();
-              }}
-              placeholder="Search by location or project name"
-              className="h-12 rounded-full border-border bg-card pl-11 pr-4 text-sm shadow-sm"
+              onKeyDown={(e) => { if (e.key === "Enter") handleApplyAllFilters(); }}
+              placeholder="ค้นหาทำเล เขต หรือชื่อโครงการ…"
+              className="h-11 rounded-full border-border bg-card pl-11 pr-4 text-sm shadow-sm"
             />
           </div>
           <Button
             variant="outline"
-            className="h-12 gap-2 rounded-full border-border bg-card px-5 shadow-sm"
+            className="h-11 gap-2 rounded-full border-border bg-card px-4 shadow-sm shrink-0"
           >
-            <BellPlus className="h-4 w-4" /> Create alert
+            <BellPlus className="h-4 w-4" /> แจ้งเตือน
           </Button>
         </div>
 
-        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {/* All filters */}
-          <button
-            onClick={applyLocation}
-            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            Filters
-            {activeFilterChips.length > 0 && (
-              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
-                {activeFilterChips.length}
-              </span>
-            )}
-          </button>
+        {/* Filter pills row */}
+        <div className="mb-6 rounded-2xl border border-border bg-card p-3 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
 
-          {/* Property type */}
-          <Popover
-            open={typeOpen}
-            onOpenChange={setTypeOpen}
-          >
-            <PopoverTrigger asChild>
-              <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60">
-                <Building className="h-4 w-4" />
-                {typeDraft.size === 0 ? "Property type" : `Property type · ${typeDraft.size}`}
-                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent style={{ zIndex: 1000 }} align="start" className="w-[320px] p-0">
-              <div className="border-b border-border px-4 py-3 text-sm font-semibold">
-                Property type
-              </div>
-              <div className="max-h-[280px] overflow-auto p-2">
-                {typeOptions.map(({ value, label, icon: Icon }) => {
-                  const checked = typeDraft.has(value);
-                  return (
-                    <label
-                      key={value}
-                      className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-secondary/60"
-                    >
-                      <Checkbox checked={checked} onCheckedChange={() => toggleTypeDraft(value)} />
+            {/* Property type */}
+            <Popover open={typeOpen} onOpenChange={setTypeOpen}>
+              <PopoverTrigger asChild>
+                <button className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition hover:bg-secondary/60 ${typeDraft.size > 0 ? "border-primary bg-primary/5 text-primary" : "border-border bg-background"}`}>
+                  <Building className="h-3.5 w-3.5" />
+                  {typeDraft.size === 0 ? "ประเภท" : typeOptions.filter(o => typeDraft.has(o.value)).map(o => o.label.split(" ")[0]).join(", ")}
+                  {typeDraft.size > 0 && <span className="grid h-4 w-4 place-items-center rounded-full bg-primary text-[10px] text-primary-foreground font-bold">{typeDraft.size}</span>}
+                  <ChevronDown className="h-3 w-3 opacity-50" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent style={{ zIndex: 1000 }} align="start" className="w-[280px] p-0">
+                <div className="border-b border-border px-4 py-2.5 text-sm font-semibold">ประเภทอสังหาฯ</div>
+                <div className="p-2">
+                  {typeOptions.map(({ value, label, icon: Icon }) => (
+                    <label key={value} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-secondary/60">
+                      <Checkbox checked={typeDraft.has(value)} onCheckedChange={() => toggleTypeDraft(value)} />
                       <Icon className="h-4 w-4 text-muted-foreground" />
                       <span className="flex-1 text-sm">{label}</span>
-                      <span className="text-xs text-muted-foreground">
-                        ({typeCounts[value] ?? 0})
-                      </span>
+                      <span className="text-xs text-muted-foreground">({typeCounts[value] ?? 0})</span>
                     </label>
-                  );
-                })}
-              </div>
-              <div className="flex items-center gap-2 border-t border-border px-4 py-3">
-                <Button onClick={applyTypeFilters} className="flex-1" size="sm">
-                  Apply{typeDraft.size > 0 ? ` (${typeDraft.size})` : ""}
-                </Button>
-                <Button onClick={clearTypeFilters} variant="ghost" size="sm">
-                  Clear
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
+                  ))}
+                </div>
+                <div className="flex gap-2 border-t border-border px-4 py-2.5">
+                  <Button onClick={() => setTypeOpen(false)} className="flex-1" size="sm">เลือก</Button>
+                  <Button onClick={() => setTypeDraft(new Set())} variant="ghost" size="sm">ล้าง</Button>
+                </div>
+              </PopoverContent>
+            </Popover>
 
-          {/* Price */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium shadow-sm hover:bg-secondary/60">
-                <DollarSign className="h-4 w-4" />
-                {filtersDraft.maxPrice || filtersDraft.minPrice
-                  ? `฿${(filtersDraft.minPrice ?? 0).toLocaleString()} – ${filtersDraft.maxPrice ? "฿" + filtersDraft.maxPrice.toLocaleString() : "∞"}`
-                  : "Price"}
-                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              style={{ zIndex: 1000 }}
-              align="start"
-              className="w-[300px] p-4 space-y-3"
+            {/* Price */}
+            <Popover open={priceOpen} onOpenChange={setPriceOpen}>
+              <PopoverTrigger asChild>
+                <button className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition hover:bg-secondary/60 ${(filtersDraft.minPrice != null || filtersDraft.maxPrice != null) ? "border-primary bg-primary/5 text-primary" : "border-border bg-background"}`}>
+                  <DollarSign className="h-3.5 w-3.5" />
+                  {priceLabel}
+                  <ChevronDown className="h-3 w-3 opacity-50" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent style={{ zIndex: 1000 }} align="start" className="w-[300px] p-4 space-y-3">
+                <div className="text-sm font-semibold">งบประมาณ (บาท)</div>
+                {/* Preset chips */}
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setPricePreset(undefined, undefined)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${!filtersDraft.minPrice && !filtersDraft.maxPrice ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-secondary/60"}`}
+                  >ทั้งหมด</button>
+                  {PRICE_PRESETS.map((p) => (
+                    <button
+                      key={p.label}
+                      onClick={() => setPricePreset(p.min, p.max)}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${activePricePreset?.label === p.label ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-secondary/60"}`}
+                    >{p.label}</button>
+                  ))}
+                </div>
+                <div className="text-xs text-muted-foreground">หรือใส่ราคากำหนดเอง</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input type="number" placeholder="ราคาต่ำสุด" value={filtersDraft.minPrice ?? ""}
+                    onChange={(e) => setFiltersDraft({ ...filtersDraft, minPrice: e.target.value ? Number(e.target.value) : undefined })} />
+                  <Input type="number" placeholder="ราคาสูงสุด" value={filtersDraft.maxPrice ?? ""}
+                    onChange={(e) => setFiltersDraft({ ...filtersDraft, maxPrice: e.target.value ? Number(e.target.value) : undefined })} />
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setFiltersDraft({ ...filtersDraft, minPrice: undefined, maxPrice: undefined })}>ล้าง</Button>
+              </PopoverContent>
+            </Popover>
+
+            {/* Near BTS/MRT */}
+            <button
+              onClick={() => setFiltersDraft({ ...filtersDraft, nearTransit: filtersDraft.nearTransit ? undefined : true })}
+              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition ${filtersDraft.nearTransit ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-secondary/60"}`}
             >
-              <div className="text-sm font-semibold">Price (THB)</div>
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  type="number"
-                  placeholder="Min"
-                  value={filtersDraft.minPrice ?? ""}
-                  onChange={(e) =>
-                    setFiltersDraft({
-                      ...filtersDraft,
-                      minPrice: e.target.value ? Number(e.target.value) : undefined,
-                    })
-                  }
-                />
-                <Input
-                  type="number"
-                  placeholder="Max"
-                  value={filtersDraft.maxPrice ?? ""}
-                  onChange={(e) =>
-                    setFiltersDraft({
-                      ...filtersDraft,
-                      maxPrice: e.target.value ? Number(e.target.value) : undefined,
-                    })
-                  }
-                />
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setFiltersDraft({ ...filtersDraft, minPrice: undefined, maxPrice: undefined })}
+              <Train className="h-3.5 w-3.5" />
+              BTS / MRT
+            </button>
+
+            {/* Year built */}
+            <Popover open={yearOpen} onOpenChange={setYearOpen}>
+              <PopoverTrigger asChild>
+                <button className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition hover:bg-secondary/60 ${filtersDraft.minYearBuilt != null ? "border-primary bg-primary/5 text-primary" : "border-border bg-background"}`}>
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  {filtersDraft.minYearBuilt != null ? `${filtersDraft.minYearBuilt}+` : "ปีที่สร้าง"}
+                  <ChevronDown className="h-3 w-3 opacity-50" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent style={{ zIndex: 1000 }} align="start" className="w-[220px] p-2">
+                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">ปีที่สร้าง</div>
+                {YEAR_PRESETS.map((p) => (
+                  <button
+                    key={p.label}
+                    onClick={() => { setFiltersDraft({ ...filtersDraft, minYearBuilt: p.minYear }); setYearOpen(false); }}
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-secondary/60 ${activeYearPreset?.label === p.label ? "font-semibold text-primary" : ""}`}
+                  >
+                    {activeYearPreset?.label === p.label && <Check className="h-3.5 w-3.5 shrink-0" />}
+                    <span className={activeYearPreset?.label === p.label ? "" : "ml-5.5"}>{p.label}</span>
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+
+            {/* Has rental yield */}
+            <button
+              onClick={() => setFiltersDraft({ ...filtersDraft, hasYield: filtersDraft.hasYield ? undefined : true })}
+              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition ${filtersDraft.hasYield ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-border bg-background hover:bg-secondary/60"}`}
+            >
+              <TrendingUp className="h-3.5 w-3.5" />
+              มี Yield
+            </button>
+
+            {/* Sort by */}
+            <Popover open={sortOpen} onOpenChange={setSortOpen}>
+              <PopoverTrigger asChild>
+                <button className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition hover:bg-secondary/60 ${filtersDraft.sortBy ? "border-primary bg-primary/5 text-primary" : "border-border bg-background"}`}>
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  {filtersDraft.sortBy ? activeSortOption.label : "เรียงตาม"}
+                  <ChevronDown className="h-3 w-3 opacity-50" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent style={{ zIndex: 1000 }} align="start" className="w-[220px] p-2">
+                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">เรียงลำดับ</div>
+                {SORT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.label}
+                    onClick={() => { setFiltersDraft({ ...filtersDraft, sortBy: opt.value }); setSortOpen(false); }}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-secondary/60 ${activeSortOption.label === opt.label ? "font-semibold text-primary" : ""}`}
+                  >
+                    <span className="text-base leading-none">{opt.icon}</span>
+                    {opt.label}
+                    {activeSortOption.label === opt.label && <Check className="ml-auto h-3.5 w-3.5 shrink-0" />}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+
+            {/* Divider */}
+            <div className="hidden sm:block h-5 w-px bg-border mx-1" />
+
+            {/* Apply */}
+            <button
+              onClick={handleApplyAllFilters}
+              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-5 text-sm font-semibold shadow-sm transition-all duration-200 cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90 ${isFiltersDirty ? "ring-2 ring-primary/30" : ""}`}
+            >
+              ค้นหา
+              {isFiltersDirty && (
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+                </span>
+              )}
+            </button>
+
+            {/* Clear all */}
+            {hasActiveFilters && (
+              <button
+                onClick={() => { setFilters({}); setFiltersDraft({}); setTypeDraft(new Set()); setLocationInput(""); }}
+                className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-border px-3 text-xs text-muted-foreground hover:text-foreground hover:border-foreground transition"
               >
-                Clear
-              </Button>
-            </PopoverContent>
-          </Popover>
-
-          {/* Near transit */}
-          <button
-            onClick={() =>
-              setFiltersDraft({ ...filtersDraft, nearTransit: filtersDraft.nearTransit ? undefined : true })
-            }
-            className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-sm ${filtersDraft.nearTransit ? "border-foreground bg-foreground text-background" : "border-border bg-card hover:bg-secondary/60"}`}
-          >
-            <Train className="h-4 w-4" />
-            Near BTS / MRT
-            {filtersDraft.nearTransit && <span className="h-1.5 w-1.5 rounded-full bg-destructive" />}
-          </button>
-
-          {/* Apply button */}
-          <button
-            onClick={handleApplyAllFilters}
-            className={`inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-5 text-sm font-semibold shadow-sm transition-all duration-200 cursor-pointer ${
-              isFiltersDirty
-                ? "bg-black text-white hover:bg-neutral-700 ring-2 ring-black/10"
-                : "bg-black text-white hover:bg-neutral-700"
-            }`}
-          >
-            Apply
-            {isFiltersDirty && (
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
-              </span>
+                <X className="h-3 w-3" /> ล้างทั้งหมด
+              </button>
             )}
-          </button>
-
-          <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-card shadow-sm hover:bg-secondary/60">
-            <ChevronRight className="h-4 w-4" />
-          </button>
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
@@ -508,32 +579,26 @@ function Index() {
             </div>
 
             {activeFilterChips.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-3">
-                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  From chat
-                </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mr-1">ตัวกรองที่ใช้</span>
                 {activeFilterChips.map((c) => (
                   <button
                     key={c.label}
                     onClick={c.clear}
-                    className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-xs font-medium hover:bg-secondary/70"
+                    className="inline-flex items-center gap-1 rounded-full bg-primary/8 border border-primary/20 px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/15 transition"
                   >
                     {c.label} <X className="h-3 w-3" />
                   </button>
                 ))}
-                <button
-                  onClick={() => setFilters({})}
-                  className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground"
-                >
-                  Clear all
-                </button>
               </div>
             )}
 
             <div>
               <div className="mb-3 flex items-baseline justify-between">
                 <h2 className="font-serif text-xl font-semibold">
-                  {hasActiveFilters ? "Results" : "Search properties"}
+                  {ragResults !== null && !hasActiveFilters
+                    ? `AI แนะนำ (${ragResults.length} รายการ)`
+                    : hasActiveFilters ? "Results" : "Search properties"}
                 </h2>
                 {hasActiveFilters && (
                   <span className="text-xs text-muted-foreground">
@@ -543,15 +608,43 @@ function Index() {
                   </span>
                 )}
               </div>
-              {!hasActiveFilters ? (
-                <div className="rounded-2xl border border-dashed border-border bg-card p-14 text-center">
-                  <Sparkles className="mx-auto mb-3 h-8 w-8 text-muted-foreground/40" />
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Search by location, project name, or chat with the AI assistant
+              {ragResults !== null && !hasActiveFilters ? (
+                <div>
+                  <div className="mb-3 flex items-center gap-2 text-xs text-amber-600">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    แนะนำโดย RAG bot · {ragResults.length} รายการที่ตรงกับคำถามของคุณ
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                    {ragResults.map((p) => (
+                      <PropertyCard
+                        key={p.id}
+                        property={p}
+                        isFavorite={favorites.has(p.id)}
+                        onToggleFavorite={toggleFavorite}
+                        onFocus={handleSelectProperty}
+                        highlighted={focusedId === p.id}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : !hasActiveFilters ? (
+                <div className="rounded-2xl border border-dashed border-border bg-gradient-to-br from-card to-secondary/40 p-12 text-center">
+                  <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-primary/5 border border-border">
+                    <Sparkles className="h-7 w-7 text-amber-500" />
+                  </div>
+                  <p className="text-base font-semibold text-foreground mb-1">
+                    Find your perfect Bangkok home
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground/60">
-                    53,466 Bangkok listings ready to explore
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Use the search bar, filters, or chat with the AI to explore 53,466 listings
                   </p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {["Sukhumvit condos", "Houses near BTS", "Budget under 3M"].map((hint) => (
+                      <span key={hint} className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
+                        {hint}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               ) : results.length === 0 && !isLoading ? (
                 <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
@@ -637,14 +730,23 @@ function Index() {
               sessionId={sessionId}
               onSessionChange={setSessionId}
               onNewChat={startNewChat}
+              onRagResults={setRagResults}
             />
           </div>
         </div>
       </main>
 
-      <footer className="border-t border-border bg-card/50 py-6">
-        <div className="mx-auto max-w-[1600px] px-6 text-center text-xs text-muted-foreground">
-          Estate AI · 53,466 Bangkok listings · AI
+      <footer className="border-t border-border bg-card/50 py-8">
+        <div className="mx-auto max-w-[1600px] px-6 flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2">
+            <div className="grid h-7 w-7 place-items-center rounded-lg bg-primary text-primary-foreground">
+              <Building2 className="h-3.5 w-3.5" />
+            </div>
+            <span className="font-serif text-sm font-semibold">Estate AI</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            53,466 Bangkok listings · AI-powered property search · Data from Baania
+          </p>
         </div>
       </footer>
 

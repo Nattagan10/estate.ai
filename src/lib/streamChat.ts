@@ -2,6 +2,79 @@ import type { Filters } from "@/lib/filterProperties";
 
 export type ChatMsg = { role: "user" | "assistant"; content: string };
 
+export type RagSource = {
+  name: string | null;
+  type: string | null;
+  district: string | null;
+  province: string | null;
+  price_thb: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  distance_km: number | null;
+  url: string | null;
+};
+
+export async function ragChat({
+  messages,
+  signal,
+  onDelta,
+  onDone,
+  onError,
+  onResults,
+}: {
+  messages: ChatMsg[];
+  signal?: AbortSignal;
+  onDelta: (chunk: string) => void;
+  onDone: () => void;
+  onError: (err: string) => void;
+  onResults?: (sources: RagSource[]) => void;
+}) {
+  try {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    const query = lastUser?.content ?? "";
+    const history = messages
+      .slice(0, -1)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    const resp = await fetch("/api/rag-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, history }),
+      signal,
+    });
+
+    if (!resp.ok) {
+      let msg = "RAG service unavailable.";
+      try {
+        const j = await resp.json();
+        if (j?.error) msg = j.error;
+      } catch {
+        /* noop */
+      }
+      onError(msg);
+      return;
+    }
+
+    const data = await resp.json();
+    const answer: string = data.answer ?? "";
+    const mode: string = data.mode ?? "semantic";
+    const modeLabel = mode === "location" ? "Location search" : "Semantic search";
+
+    if (onResults && Array.isArray(data.sources) && data.sources.length > 0) {
+      onResults((data.sources as RagSource[]).slice(0, 5));
+    }
+
+    onDelta(answer + `\n\n*${modeLabel}*`);
+    onDone();
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      onDone();
+      return;
+    }
+    onError(e instanceof Error ? e.message : "Unknown error");
+  }
+}
+
 export async function streamChat({
   messages,
   filters,

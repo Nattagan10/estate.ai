@@ -1,7 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { searchPropertiesServer, type SearchFilters } from "@/lib/properties.functions";
+import { rowToProperty, type DbPropertyRow } from "@/data/properties";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import Anthropic from "@anthropic-ai/sdk";
+
+async function searchWithRAG(
+  query: string,
+  topK = 12,
+): Promise<{ properties: ReturnType<typeof rowToProperty>[]; total: number; mode: string } | null> {
+  const base = process.env.RAG_SERVICE_URL;
+  if (!base) return null;
+  try {
+    const resp = await fetch(`${base}/search`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, top_k: topK }),
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const rows: DbPropertyRow[] = data.results ?? [];
+    return { properties: rows.map(rowToProperty), total: rows.length, mode: data.mode ?? "semantic" };
+  } catch {
+    return null;
+  }
+}
 
 type Msg = { role: "user" | "assistant"; content: string };
 type ReqBody = { messages: Msg[]; filters?: SearchFilters; sessionId?: string | null };
@@ -109,7 +132,7 @@ function localExtractFilters(text: string): ExtractionResult {
 
   const areaMapping: Record<string, string[]> = {
     // ---- BTS/MRT corridors ----
-    Asok: ["asok", "asoke", "อโศก", "阿索克", "アソーク"],
+    Asok: ["asok", "asoke", "อโศก", "สุขุมวิท", "sukhumvit", "阿索克", "アソーク"],
     Thonglor: ["thonglor", "thong lo", "ทองหล่อ", "通罗", "トンロー"],
     "Phrom Phong": ["phrom phong", "phromphong", "พร้อมพงษ์", "澎蓬", "プロンポン"],
     Ekkamai: ["ekkamai", "ekamai", "เอกมัย", "伊卡迈", "エカマイ"],
@@ -500,34 +523,47 @@ If nothing found, return {}.`,
             }
           }
 
-          // 4. Two-Pass Query properties
-          let { properties, total } = await searchPropertiesServer({ ...newFilters, limit: 12 });
+          // 4. Search properties — semantic (bot_reccomend) with SQL fallback
           let didDropFilters = false;
           let nearbyFallback = false;
+          let searchMode = "sql";
 
-          if (total === 0 && Object.keys(extracted).length > 0 && !resetRequested) {
-            // PASS 2: Try to find something nearby instead of just dropping
-            let fallbackFilters = { ...newFilters };
-            delete fallbackFilters.area; // Broaden the area
-            delete fallbackFilters.propertyType; // Broaden the type
-            
-            const fallbackResult = await searchPropertiesServer({ ...fallbackFilters, limit: 12 });
-            if (fallbackResult.total > 0) {
-              properties = fallbackResult.properties;
-              total = fallbackResult.total;
-              newFilters = fallbackFilters;
-              nearbyFallback = true;
-            } else {
-               // Complete reset
-               const rawFallback = await searchPropertiesServer({ ...extracted, limit: 12 });
-               if (rawFallback.total > 0) {
-                 properties = rawFallback.properties;
-                 total = rawFallback.total;
-                 newFilters = extracted;
-                 didDropFilters = true;
-               }
+          // Try semantic search first
+          const ragResult = await searchWithRAG(userText, 12);
+          let properties = ragResult?.properties ?? [];
+          let total = ragResult?.total ?? 0;
+          if (ragResult) searchMode = ragResult.mode;
+
+          // Fall back to SQL if RAG unavailable or returned nothing
+          if (!ragResult || total === 0) {
+            const sqlResult = await searchPropertiesServer({ ...newFilters, limit: 12 });
+            properties = sqlResult.properties;
+            total = sqlResult.total;
+            searchMode = "sql";
+
+            if (total === 0 && Object.keys(extracted).length > 0 && !resetRequested) {
+              let fallbackFilters = { ...newFilters };
+              delete fallbackFilters.area;
+              delete fallbackFilters.propertyType;
+              const fallbackResult = await searchPropertiesServer({ ...fallbackFilters, limit: 12 });
+              if (fallbackResult.total > 0) {
+                properties = fallbackResult.properties;
+                total = fallbackResult.total;
+                newFilters = fallbackFilters;
+                nearbyFallback = true;
+              } else {
+                const rawFallback = await searchPropertiesServer({ ...extracted, limit: 12 });
+                if (rawFallback.total > 0) {
+                  properties = rawFallback.properties;
+                  total = rawFallback.total;
+                  newFilters = extracted;
+                  didDropFilters = true;
+                }
+              }
             }
           }
+
+          if (process.env.NODE_ENV === "development") console.log(`[Dev] Search mode: ${searchMode}, results: ${total}`);
 
           // 5. Log user message and update questionnaire to Supabase
           if (activeSessionId && lastUser) {
@@ -603,7 +639,7 @@ ${filterNote}
 
 ${missingPrompt}
 
-รายการ property ที่พบในระบบ (${total} รายการ):
+รายการ property ที่พบในระบบ (${total} รายการ, วิธีค้นหา: ${searchMode === "sql" ? "keyword filter" : searchMode === "location" ? "geocoding+distance" : "semantic search"}):
 ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเภท: ${p.propertyType}, ห้องนอน: ${p.bedrooms || "Studio"}, ราคา: ฿${p.price.toLocaleString()})`).join("\n")}
 
 ถ้ามี property: แนะนำไม่เกิน 3 รายการ บอกชื่อ ทำเล ห้องนอน ราคา แล้วบอกเหตุผลสั้น ๆ 1 ประโยคว่าเหมาะกับลูกค้าอย่างไร

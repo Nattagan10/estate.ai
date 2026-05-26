@@ -7,6 +7,9 @@ export type Filters = {
   minPrice?: number;
   maxPrice?: number;
   nearTransit?: boolean;
+  sortBy?: "price_asc" | "price_desc" | "newest" | "yield";
+  minYearBuilt?: number;
+  hasYield?: boolean;
 };
 
 export function formatPrice(p: { price?: number | null }): string {

@@ -1,9 +1,48 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Send, Sparkles, Building2, Plus, X, Square } from "lucide-react";
-import { streamChat, type ChatMsg } from "@/lib/streamChat";
+import { Send, Sparkles, Building2, Plus, X, Square, Layers } from "lucide-react";
+import { streamChat, ragChat, type ChatMsg, type RagSource } from "@/lib/streamChat";
 import type { Filters } from "@/lib/filterProperties";
+import type { Property } from "@/data/properties";
 import { PROPERTY_TYPE_LABEL } from "@/lib/filterProperties";
+
+function ragSourceToProperty(s: RagSource, idx: number): Property {
+  const t = (s.type ?? "").toLowerCase();
+  const propertyType: Property["propertyType"] =
+    t.includes("condo") || t.includes("apartment") ? "condo"
+    : t.includes("townhome") || t.includes("townhouse") ? "townhouse"
+    : t.includes("commercial") || t.includes("retail") ? "commercial"
+    : t.includes("house") || t.includes("villa") ? "house"
+    : "condo";
+  const id = s.url ? `rag-${s.url.split("/").pop() ?? idx}` : `rag-${idx}`;
+  return {
+    id,
+    name: s.name ?? "",
+    description: [s.type, s.district, s.province].filter(Boolean).join(" · "),
+    price: s.price_thb ?? 0,
+    listingType: "sale",
+    propertyType,
+    bedrooms: 0, bathrooms: 0, area: 0,
+    area_name: s.district ?? s.province ?? "",
+    lat: s.latitude ?? 13.7563,
+    lng: s.longitude ?? 100.5018,
+    address: [s.district, s.province].filter(Boolean).join(", "),
+    image: "",
+    availability: "available",
+    nearby: [],
+    tags: [],
+    province: s.province ?? "",
+    district: s.district ?? "",
+    neighborhood: "",
+    developer: "",
+    price_per_sqm: 0,
+    year_built: 0,
+    nbr_floors: 0,
+    rental_yield: null,
+    near_transit: null,
+    url: s.url ?? "",
+  };
+}
 
 const QUICK = [
   "คอนโดแถวสุขุมวิท งบ 3 ล้าน",
@@ -23,6 +62,7 @@ export function ChatPanel({
   onSessionChange,
   onNewChat,
   onTotalChange,
+  onRagResults,
   initialAssistantMessage,
 }: {
   filters: Filters;
@@ -31,8 +71,10 @@ export function ChatPanel({
   onSessionChange?: (id: string | null) => void;
   onNewChat?: () => void;
   onTotalChange?: (n: number) => void;
+  onRagResults?: (properties: Property[]) => void;
   initialAssistantMessage?: string;
 }) {
+  const [useRag, setUseRag] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>(() => {
     try {
       const saved = localStorage.getItem("estate_chat_messages");
@@ -44,7 +86,7 @@ export function ChatPanel({
     return [{
       role: "assistant",
       content: initialAssistantMessage ??
-        "Hi! I'm **Estate AI**. Tell me about the area, budget or vibe you want and I'll narrow down 53,466 Bangkok listings instantly.",
+        "สวัสดีค่ะ! ฉันคือ **Estate AI**\n\nบอกฉันถึงทำเลที่ต้องการ งบประมาณ หรือไลฟ์สไตล์ที่อยากได้ แล้วฉันจะค้นหาจากรายการ 53,466 อสังหาฯ ในกรุงเทพให้ทันทีค่ะ\n\n*Hi! Tell me the area, budget, or lifestyle you want and I'll search 53,466 Bangkok listings instantly.*",
     }];
   });
   const [input, setInput] = useState("");
@@ -75,17 +117,10 @@ export function ChatPanel({
     const abort = new AbortController();
     abortRef.current = abort;
     let acc = "";
-    await streamChat({
-      messages: next,
-      filters,
-      sessionId,
+
+    const sharedCallbacks = {
       signal: abort.signal,
-      onFilters: ({ filters: f, total, sessionId: sid }) => {
-        onFiltersChange(f);
-        onTotalChange?.(total);
-        if (sid && sid !== sessionId) onSessionChange?.(sid);
-      },
-      onDelta: (chunk) => {
+      onDelta: (chunk: string) => {
         acc += chunk;
         setMessages((prev) => {
           const last = prev[prev.length - 1];
@@ -121,7 +156,29 @@ export function ChatPanel({
           ];
         });
       },
-    });
+    };
+
+    if (useRag) {
+      await ragChat({
+        messages: next,
+        ...sharedCallbacks,
+        onResults: (sources) => {
+          onRagResults?.(sources.map((s, i) => ragSourceToProperty(s, i)));
+        },
+      });
+    } else {
+      await streamChat({
+        messages: next,
+        filters,
+        sessionId,
+        onFilters: ({ filters: f, total, sessionId: sid }) => {
+          onFiltersChange(f);
+          onTotalChange?.(total);
+          if (sid && sid !== sessionId) onSessionChange?.(sid);
+        },
+        ...sharedCallbacks,
+      });
+    }
   };
 
   const cancel = () => {
@@ -153,19 +210,33 @@ export function ChatPanel({
         className="flex items-center gap-3 border-b border-border bg-card px-5 py-4"
         style={{ backgroundImage: "var(--gradient-gloss)" }}
       >
-        <div className="grid h-10 w-10 place-items-center rounded-full bg-primary text-primary-foreground">
+        <div className="relative grid h-10 w-10 place-items-center rounded-full bg-primary text-primary-foreground shrink-0">
           <Building2 className="h-5 w-5" />
+          <span className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full bg-amber-400 ring-2 ring-card">
+            <Sparkles className="h-2.5 w-2.5 text-amber-900" />
+          </span>
         </div>
-        <div className="flex-1">
-          <div className="font-serif text-base font-semibold text-foreground">Estate AI</div>
-
+        <div className="flex-1 min-w-0">
+          <div className="font-serif text-base font-semibold text-foreground leading-tight">Estate AI</div>
+          <div className="text-[11px] text-muted-foreground">Bangkok property assistant</div>
         </div>
-        <Sparkles className="h-4 w-4 text-muted-foreground" />
+        <button
+          onClick={() => setUseRag((v) => !v)}
+          title={useRag ? "Using bot_reccomend RAG — click to switch to estate.ai" : "Using estate.ai — click to switch to bot_reccomend RAG"}
+          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+            useRag
+              ? "border-amber-400 bg-amber-400/10 text-amber-600 hover:bg-amber-400/20"
+              : "border-border bg-card text-foreground/70 hover:border-accent hover:text-foreground"
+          }`}
+        >
+          <Layers className="h-3 w-3" />
+          {useRag ? "RAG" : "AI"}
+        </button>
         {onNewChat && (
           <button
             onClick={onNewChat}
             title="Start a new chat"
-            className="ml-2 inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-foreground/70 hover:border-accent hover:text-foreground transition"
+            className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-foreground/70 hover:border-accent hover:text-foreground transition"
           >
             <Plus className="h-3 w-3" /> New
           </button>
@@ -176,14 +247,14 @@ export function ChatPanel({
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+              className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                 m.role === "user"
-                  ? "bg-primary text-primary-foreground rounded-br-sm"
-                  : "bg-secondary text-foreground rounded-bl-sm"
+                  ? "bg-primary text-primary-foreground rounded-br-sm shadow-sm"
+                  : "bg-secondary text-foreground rounded-bl-sm border border-border/60"
               }`}
             >
               {m.role === "assistant" ? (
-                <div className="prose prose-sm max-w-none prose-p:my-1 prose-strong:text-primary">
+                <div className="prose prose-sm max-w-none prose-p:my-1.5 prose-strong:text-foreground prose-strong:font-semibold prose-ul:my-1 prose-li:my-0.5">
                   <ReactMarkdown>{m.content || "…"}</ReactMarkdown>
                 </div>
               ) : (

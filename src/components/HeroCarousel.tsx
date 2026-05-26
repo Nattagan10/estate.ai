@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChevronRight, Image as ImageIcon, Info } from "lucide-react";
+import { ChevronRight, Image as ImageIcon, Info, Building2, Sparkles, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PropertyModal, type ModalPropertyData } from "@/components/PropertyModal";
 
@@ -27,6 +27,12 @@ const slides = [
   },
 ];
 
+const STATS = [
+  { icon: Building2, value: "53,466", label: "Listings" },
+  { icon: MapPin, value: "50+", label: "Districts" },
+  { icon: Sparkles, value: "AI", label: "Powered Search" },
+];
+
 export function HeroCarousel() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
@@ -43,7 +49,6 @@ export function HeroCarousel() {
   const handleNext = () => {
     setIsAutoPlaying(false);
     setCurrentIndex((prev) => (prev + 1) % slides.length);
-    // Resume auto-play after interaction
     setTimeout(() => setIsAutoPlaying(true), 10000);
   };
 
@@ -54,89 +59,80 @@ export function HeroCarousel() {
   };
 
   return (
-    <div className="relative w-full h-[600px] md:h-[700px] lg:h-[80vh] overflow-hidden bg-zinc-950">
-      {/* Background Slides */}
-      {slides.map((slide, index) => (
-        <div
-          key={slide.id}
-          className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-            index === currentIndex ? "opacity-100 z-10" : "opacity-0 z-0"
-          }`}
-        >
-          {/* Image */}
+    <div className="relative w-full overflow-hidden bg-zinc-950">
+      <div className="h-[560px] md:h-[640px] lg:h-[76vh] relative">
+        {/* Background Slides */}
+        {slides.map((slide, index) => (
           <div
-            className="absolute inset-0 bg-cover bg-center transition-transform duration-[10000ms] ease-linear scale-105"
-            style={{
-              backgroundImage: `url('${slide.image}')`,
-              transform: index === currentIndex ? "scale(1.0)" : "scale(1.05)",
-            }}
-          />
-          
-          {/* Gradients for readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-zinc-950/30 to-transparent" />
-        </div>
-      ))}
+            key={slide.id}
+            className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+              index === currentIndex ? "opacity-100 z-10" : "opacity-0 z-0"
+            }`}
+          >
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{
+                backgroundImage: `url('${slide.image}')`,
+                transform: index === currentIndex ? "scale(1.0)" : "scale(1.05)",
+                transition: "transform 10000ms linear",
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-zinc-950/30 to-transparent" />
+          </div>
+        ))}
 
-      {/* Main Content Overlay */}
-      <div className="relative z-20 mx-auto h-full max-w-[1600px] px-6 py-10 md:py-14 flex flex-col justify-end">
-        <div className="max-w-2xl text-white mb-10 md:mb-16">
-          {/* Tags */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            {slides[currentIndex].tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center rounded-full border border-white/20 bg-black/40 px-3 py-1 text-xs font-medium backdrop-blur-sm"
+        {/* Content */}
+        <div className="relative z-20 mx-auto h-full max-w-[1600px] px-6 py-10 md:py-14 flex flex-col justify-end">
+          <div className="max-w-2xl text-white mb-10 md:mb-14">
+            <div className="flex flex-wrap gap-2 mb-4">
+              {slides[currentIndex].tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center rounded-full border border-white/20 bg-black/40 px-3 py-1 text-xs font-medium backdrop-blur-sm"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+
+            <h1 className="font-serif text-4xl font-bold leading-tight md:text-6xl lg:text-7xl mb-4 drop-shadow-md">
+              {slides[currentIndex].title}
+            </h1>
+
+            <p className="text-base text-zinc-300 md:text-lg mb-8 max-w-xl drop-shadow-sm line-clamp-2">
+              {slides[currentIndex].description}
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                className="h-11 px-6 gap-2 bg-white text-zinc-950 hover:bg-zinc-100 font-semibold text-sm rounded-full transition-colors"
+                size="lg"
               >
-                {tag}
-              </span>
-            ))}
+                <ImageIcon className="w-4 h-4" />
+                View Gallery
+              </Button>
+              <Button
+                variant="secondary"
+                className="h-11 px-6 gap-2 bg-white/10 text-white hover:bg-white/20 backdrop-blur-md border border-white/10 font-semibold text-sm rounded-full transition-colors"
+                size="lg"
+                onClick={() => setIsModalOpen(true)}
+              >
+                <Info className="w-4 h-4" />
+                Property Details
+              </Button>
+            </div>
           </div>
 
-          {/* Title */}
-          <h1 className="font-serif text-4xl font-bold leading-tight md:text-6xl lg:text-7xl mb-4 drop-shadow-md">
-            {slides[currentIndex].title}
-          </h1>
-
-          {/* Description */}
-          <p className="text-base text-zinc-300 md:text-lg lg:text-xl mb-8 max-w-xl drop-shadow-sm line-clamp-3">
-            {slides[currentIndex].description}
-          </p>
-
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Button
-              className="h-12 px-6 gap-2 bg-white text-zinc-950 hover:bg-zinc-200 font-semibold text-sm rounded-md transition-colors"
-              size="lg"
-            >
-              <ImageIcon className="w-5 h-5" />
-              VIEW GALLERY
-            </Button>
-            <Button
-              variant="secondary"
-              className="h-12 px-6 gap-2 bg-zinc-600/60 text-white hover:bg-zinc-600/80 backdrop-blur-md border border-white/10 font-semibold text-sm rounded-md transition-colors"
-              size="lg"
-              onClick={() => setIsModalOpen(true)}
-            >
-              <Info className="w-5 h-5" />
-              PROPERTY DETAILS
-            </Button>
-          </div>
-        </div>
-
-        {/* Carousel Controls (Bottom Right) */}
-        <div className="absolute bottom-10 md:bottom-14 right-6 flex flex-col items-end gap-6">
-
-
-          {/* Pagination and Arrow */}
-          <div className="flex items-center gap-4">
+          {/* Carousel controls */}
+          <div className="absolute bottom-10 md:bottom-14 right-6 flex items-center gap-4">
             <div className="flex gap-2">
               {slides.map((slide, index) => (
                 <button
                   key={slide.id}
                   onClick={() => handleSelect(index)}
-                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                    index === currentIndex ? "bg-white w-6" : "bg-white/40 hover:bg-white/80"
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    index === currentIndex ? "bg-white w-6" : "bg-white/40 w-2 hover:bg-white/70"
                   }`}
                   aria-label={`Go to slide ${index + 1}`}
                 />
@@ -144,19 +140,38 @@ export function HeroCarousel() {
             </div>
             <button
               onClick={handleNext}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/40 text-white backdrop-blur-sm transition-all hover:bg-white/20 hover:border-white/50"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/40 text-white backdrop-blur-sm transition-all hover:bg-white/20 hover:border-white/50"
               aria-label="Next slide"
             >
-              <ChevronRight className="h-5 w-5" />
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>
       </div>
-      
-      <PropertyModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        property={slides[currentIndex] as ModalPropertyData} 
+
+      {/* Stats bar */}
+      <div className="relative z-30 border-t border-white/10 bg-zinc-900/95 backdrop-blur-sm">
+        <div className="mx-auto max-w-[1600px] px-6 py-4">
+          <div className="flex items-center justify-center gap-8 md:gap-16">
+            {STATS.map(({ icon: Icon, value, label }) => (
+              <div key={label} className="flex items-center gap-2.5">
+                <div className="grid h-8 w-8 place-items-center rounded-full bg-white/10">
+                  <Icon className="h-4 w-4 text-amber-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white">{value}</div>
+                  <div className="text-[11px] text-zinc-400">{label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <PropertyModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        property={slides[currentIndex] as ModalPropertyData}
         onViewMap={() => document.getElementById('map-container')?.scrollIntoView({ behavior: 'smooth' })}
       />
     </div>

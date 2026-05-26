@@ -11,6 +11,9 @@ const FiltersSchema = z.object({
   minPrice: z.number().optional(),
   maxPrice: z.number().optional(),
   nearTransit: z.boolean().optional(),
+  sortBy: z.enum(["price_asc", "price_desc", "newest", "yield"]).optional(),
+  minYearBuilt: z.number().int().optional(),
+  hasYield: z.boolean().optional(),
   page: z.number().int().min(1).optional(),
   limit: z.number().int().min(1).max(100).optional(),
 });
@@ -53,6 +56,9 @@ export async function searchPropertiesServer(
     p_near_transit:   f.nearTransit ?? false,
     p_page:           f.page ?? 1,
     p_limit:          f.limit ?? 50,
+    p_sort_by:        f.sortBy ?? "relevance",
+    p_min_year:       f.minYearBuilt ?? null,
+    p_has_yield:      f.hasYield ?? false,
   });
   if (error) throw new Error(error.message);
 
@@ -80,6 +86,8 @@ export const fetchMapPins = createServerFn({ method: "POST" })
       p_min_price:      f.minPrice ?? null,
       p_max_price:      f.maxPrice ?? null,
       p_near_transit:   f.nearTransit ?? false,
+      p_min_year:       f.minYearBuilt ?? null,
+      p_has_yield:      f.hasYield ?? false,
     });
     if (error) throw new Error(error.message);
 
