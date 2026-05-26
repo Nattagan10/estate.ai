@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, lazy, Suspense, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/sonner";
+import { Toaster } from "@/client/components/ui/sonner";
 import {
   Building2,
   MapPin,
@@ -24,20 +24,20 @@ import {
   Check,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { ChatPanel } from "@/components/ChatPanel";
-import { PropertyCard } from "@/components/PropertyCard";
-import { HeroCarousel } from "@/components/HeroCarousel";
-import { PropertyRow } from "@/components/PropertyRow";
-import { FavoritesModal } from "@/components/FavoritesModal";
-import { PROPERTY_TYPE_LABEL, type Filters } from "@/lib/filterProperties";
-import { searchProperties, fetchMapPins } from "@/lib/properties.functions";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import type { Property } from "@/data/properties";
+import { ChatPanel } from "@/client/components/ChatPanel";
+import { PropertyCard } from "@/client/components/PropertyCard";
+import { HeroCarousel } from "@/client/components/HeroCarousel";
+import { PropertyRow } from "@/client/components/PropertyRow";
+import { FavoritesModal } from "@/client/components/FavoritesModal";
+import { PROPERTY_TYPE_LABEL, type Filters } from "@/shared/lib/filterProperties";
+import { searchProperties, fetchMapPins } from "@/functions/properties";
+import { Popover, PopoverContent, PopoverTrigger } from "@/client/components/ui/popover";
+import { Checkbox } from "@/client/components/ui/checkbox";
+import { Input } from "@/client/components/ui/input";
+import { Button } from "@/client/components/ui/button";
+import type { Property } from "@/shared/data/properties";
 const PropertyMap = lazy(() =>
-  import("@/components/PropertyMap").then((m) => ({ default: m.PropertyMap })),
+  import("@/client/components/PropertyMap").then((m) => ({ default: m.PropertyMap })),
 );
 
 export const Route = createFileRoute("/")({

@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { searchPropertiesServer, type SearchFilters } from "@/lib/properties.functions";
-import { rowToProperty, type DbPropertyRow } from "@/data/properties";
+﻿import { createFileRoute } from "@tanstack/react-router";
+import { searchPropertiesServer, type SearchFilters } from "@/functions/properties";
+import { rowToProperty, type DbPropertyRow } from "@/shared/data/properties";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import Anthropic from "@anthropic-ai/sdk";
 
