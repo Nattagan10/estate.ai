@@ -4,6 +4,99 @@ import { rowToProperty, type DbPropertyRow } from "@/shared/data/properties";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import Anthropic from "@anthropic-ai/sdk";
 
+// ─── BTS / MRT / Landmark coordinate lookup ──────────────────────────────────
+// Key = canonical name (English), values = Thai/EN aliases + coords
+const STATION_COORDS: { names: string[]; lat: number; lng: number }[] = [
+  // BTS Sukhumvit Line
+  { names: ["National Stadium","national stadium","สนามกีฬาแห่งชาติ","สนามกีฬา"], lat: 13.7464, lng: 100.5294 },
+  { names: ["Siam","สยาม","สยามสแควร์","siam square"], lat: 13.7459, lng: 100.5344 },
+  { names: ["Chit Lom","chitlom","chidlom","ชิดลม","เซ็นทรัล ชิดลม"], lat: 13.7430, lng: 100.5405 },
+  { names: ["Phloen Chit","phloenchit","เพลินจิต","เพลินจิตต์"], lat: 13.7408, lng: 100.5475 },
+  { names: ["Nana","นานา"], lat: 13.7399, lng: 100.5558 },
+  { names: ["Asok","asoke","อโศก","อโศก","sukhumvit mrt","สุขุมวิท mrt","terminal 21","เทอร์มินอล 21"], lat: 13.7374, lng: 100.5602 },
+  { names: ["Phrom Phong","phromphong","พร้อมพงษ์","emquartier","เอ็มควอเทียร์","emporium","เอ็มโพเรียม"], lat: 13.7307, lng: 100.5694 },
+  { names: ["Thong Lo","thonglor","ทองหล่อ"], lat: 13.7253, lng: 100.5780 },
+  { names: ["Ekkamai","ekamai","เอกมัย"], lat: 13.7198, lng: 100.5850 },
+  { names: ["Phra Khanong","phrakhanong","พระโขนง"], lat: 13.7154, lng: 100.5914 },
+  { names: ["On Nut","onnut","อ่อนนุช"], lat: 13.7026, lng: 100.6010 },
+  { names: ["Udom Suk","udomsuk","อุดมสุข"], lat: 13.6946, lng: 100.6091 },
+  { names: ["Bang Na","bangna","บางนา"], lat: 13.6870, lng: 100.6161 },
+  { names: ["Bearing","แบริ่ง"], lat: 13.6741, lng: 100.6227 },
+  { names: ["Samrong","สำโรง"], lat: 13.6622, lng: 100.6170 },
+  // BTS Silom Line
+  { names: ["Ratchadamri","ราชดำริ","เซ็นทรัลเวิลด์","central world","centralworld"], lat: 13.7467, lng: 100.5392 },
+  { names: ["Sala Daeng","saladaeng","ศาลาแดง"], lat: 13.7282, lng: 100.5345 },
+  { names: ["Chong Nonsi","chongnonsi","ช่องนนทรี"], lat: 13.7228, lng: 100.5231 },
+  { names: ["Surasak","สุรศักดิ์"], lat: 13.7237, lng: 100.5197 },
+  { names: ["Saphan Taksin","สะพานตากสิน","taksin","ตากสิน"], lat: 13.7185, lng: 100.5136 },
+  { names: ["Wongwian Yai","วงเวียนใหญ่"], lat: 13.7218, lng: 100.4966 },
+  { names: ["Bang Wa","บางหว้า"], lat: 13.7232, lng: 100.4611 },
+  // BTS North
+  { names: ["Ratchathewi","ราชเทวี"], lat: 13.7527, lng: 100.5331 },
+  { names: ["Phaya Thai","พญาไท","payathai"], lat: 13.7576, lng: 100.5336 },
+  { names: ["Ari","อารีย์","aree"], lat: 13.7761, lng: 100.5435 },
+  { names: ["Saphan Khwai","สะพานควาย"], lat: 13.7936, lng: 100.5521 },
+  { names: ["Mo Chit","หมอชิต","chatuchak park","จตุจักร","จัตุจักร"], lat: 13.8025, lng: 100.5537 },
+  // MRT Blue Line
+  { names: ["Hua Lamphong","หัวลำโพง"], lat: 13.7388, lng: 100.5161 },
+  { names: ["Sam Yan","สามย่าน"], lat: 13.7333, lng: 100.5246 },
+  { names: ["Silom","สีลม","silom mrt"], lat: 13.7282, lng: 100.5288 },
+  { names: ["Lumphini","ลุมพินี","lumpini"], lat: 13.7245, lng: 100.5412 },
+  { names: ["Khlong Toei","khlongtoei","คลองเตย"], lat: 13.7214, lng: 100.5546 },
+  { names: ["Queen Sirikit","ศิริกิติ์","queen sirikit"], lat: 13.7232, lng: 100.5590 },
+  { names: ["Phetchaburi","เพชรบุรี"], lat: 13.7471, lng: 100.5699 },
+  { names: ["Rama 9","พระราม 9","พระรามเก้า","rama9"], lat: 13.7560, lng: 100.5619 },
+  { names: ["Thailand Cultural Centre","ศูนย์วัฒนธรรม","cultural centre"], lat: 13.7567, lng: 100.5700 },
+  { names: ["Huai Khwang","ห้วยขวาง"], lat: 13.7677, lng: 100.5726 },
+  { names: ["Sutthisan","สุทธิสาร"], lat: 13.7775, lng: 100.5726 },
+  { names: ["Ratchadaphisek","รัชดาภิเษก","รัชดา"], lat: 13.7945, lng: 100.5692 },
+  { names: ["Lat Phrao","ลาดพร้าว","ladprao"], lat: 13.8112, lng: 100.5618 },
+  { names: ["Bang Sue","บางซื่อ"], lat: 13.8028, lng: 100.5406 },
+  { names: ["Victory Monument","อนุสาวรีย์ชัยสมรภูมิ","อนุสาวรีย์","วิคตอรี่"], lat: 13.7640, lng: 100.5374 },
+  { names: ["Chatuchak","จตุจักร","จัตุจักร","JJ market","ตลาดนัดจตุจักร"], lat: 13.7998, lng: 100.5499 },
+  // Landmarks
+  { names: ["สยาม พารากอน","paragon","siam paragon"], lat: 13.7463, lng: 100.5348 },
+  { names: ["สาทร","sathorn","สาทรใต้"], lat: 13.7220, lng: 100.5253 },
+  { names: ["ลาดพร้าว 71","ลาดพร้าว71"], lat: 13.7950, lng: 100.5840 },
+  { names: ["สุวรรณภูมิ","suvarnabhumi airport","สนามบินสุวรรณภูมิ"], lat: 13.6900, lng: 100.7501 },
+  { names: ["ดอนเมือง","don mueang","สนามบินดอนเมือง"], lat: 13.9126, lng: 100.6066 },
+];
+
+function lookupStation(query: string): { lat: number; lng: number; name: string } | null {
+  const q = query.toLowerCase().trim();
+  for (const s of STATION_COORDS) {
+    if (s.names.some((n) => q.includes(n.toLowerCase()) || n.toLowerCase().includes(q))) {
+      return { lat: s.lat, lng: s.lng, name: s.names[0] };
+    }
+  }
+  return null;
+}
+
+async function geocodePlace(query: string): Promise<{ lat: number; lng: number; name: string } | null> {
+  // 1. Try hardcoded station/landmark table first (fast + free)
+  const station = lookupStation(query);
+  if (station) return station;
+
+  // 2. Fall back to Google Maps Geocoding API
+  const apiKey = process.env.VITE_GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query + " Bangkok Thailand")}&key=${apiKey}&language=th&region=th`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!resp.ok) return null;
+    const data = await resp.json() as any;
+    const loc = data?.results?.[0]?.geometry?.location;
+    const formattedName = data?.results?.[0]?.formatted_address ?? query;
+    if (loc && loc.lat && loc.lng) {
+      // Sanity check: must be in Thailand
+      if (loc.lat >= 5 && loc.lat <= 21 && loc.lng >= 97 && loc.lng <= 106) {
+        return { lat: loc.lat, lng: loc.lng, name: formattedName };
+      }
+    }
+  } catch { /* noop */ }
+  return null;
+}
+
 async function searchWithRAG(
   query: string,
   topK = 12,
@@ -415,6 +508,26 @@ export const Route = createFileRoute("/api/chat")({
 
           let newFilters = resetRequested ? { ...extracted } : { ...prevFilters, ...extracted };
 
+          // ── Place-name geocoding ──────────────────────────────────────────
+          // If no explicit lat/lng already extracted, detect "ใกล้ X" / "near X" patterns
+          // and geocode to coordinates.
+          let geocodedPlaceName: string | null = null;
+          if (!newFilters.lat && !newFilters.lng) {
+            const placeRx =
+              /(?:ใกล้|near|close to|ติด|proximity|ห่าง(?:จาก)?|แถว(?:ๆ)?)\s+([^,.!?()]{2,40})(?:\s+(?:ไม่เกิน|รัศมี|within|ใน\s*\d|\d+\s*(?:km|กิโล|m|เมตร))|[,.!?]|$)/iu;
+            const m = userText.match(placeRx);
+            if (m) {
+              const placeName = m[1].trim().replace(/\s*(bts|mrt|สถานี)\s*/gi, " $1 ").trim();
+              const geo = await geocodePlace(placeName);
+              if (geo) {
+                newFilters = { ...newFilters, lat: geo.lat, lng: geo.lng };
+                geocodedPlaceName = geo.name;
+                // Default 2km radius if user said "ใกล้" without specifying distance
+                if (!newFilters.maxDistanceM) newFilters.maxDistanceM = 2000;
+              }
+            }
+          }
+
           // Language Detection
           const isChinese = /[\u4e00-\u9fa5]/.test(userText);
           const isJapanese = /[\u3040-\u309f\u30a0-\u30ff]/.test(userText);
@@ -663,10 +776,10 @@ ${filterNote}
 
 ${missingPrompt}
 
-รายการ property ที่พบในระบบ (${total} รายการ, วิธีค้นหา: ${searchMode === "sql" ? "keyword filter" : searchMode === "location" ? "geocoding+distance" : "semantic search"}${newFilters.lat ? `, anchor: ${newFilters.lat},${newFilters.lng}` : ""}):
+รายการ property ที่พบในระบบ (${total} รายการ, วิธีค้นหา: ${searchMode === "sql" ? "keyword filter" : searchMode === "location" ? "geocoding+distance" : "semantic search"}${geocodedPlaceName ? `, จุดอ้างอิง: ${geocodedPlaceName}` : newFilters.lat ? `, anchor: ${newFilters.lat?.toFixed(4)},${newFilters.lng?.toFixed(4)}` : ""}):
 ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเภท: ${p.propertyType}, ห้องนอน: ${p.bedrooms || "Studio"}, ราคา: ฿${p.price.toLocaleString()}${p.distance_m != null ? `, ระยะ: ${p.distance_m < 1000 ? p.distance_m + "m" : (p.distance_m / 1000).toFixed(1) + "km"}` : ""})`).join("\n")}
 
-ถ้ามี property: แนะนำไม่เกิน 3 รายการ บอกชื่อ ทำเล ห้องนอน ราคา${newFilters.lat ? " และระยะทาง (ใช้คำว่า 'ห่าง X เมตร/กิโลเมตรจากจุดที่คุณระบุ')" : ""} แล้วบอกเหตุผลสั้น ๆ 1 ประโยคว่าเหมาะกับลูกค้าอย่างไร
+ถ้ามี property: แนะนำไม่เกิน 3 รายการ บอกชื่อ ทำเล ห้องนอน ราคา${newFilters.lat ? ` และระยะทาง (ใช้คำว่า 'ห่าง X เมตร/กิโลเมตรจาก${geocodedPlaceName ?? "จุดที่คุณระบุ"}')` : ""} แล้วบอกเหตุผลสั้น ๆ 1 ประโยคว่าเหมาะกับลูกค้าอย่างไร
 ถ้าไม่มี property: แจ้งสั้น ๆ และแนะนำให้ปรับเงื่อนไข
 `;
 
