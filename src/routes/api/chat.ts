@@ -72,6 +72,22 @@ function lookupStation(query: string): { lat: number; lng: number; name: string 
   return null;
 }
 
+/** Haversine distance in meters between two lat/lng points */
+function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6_371_000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return Math.round(R * 2 * Math.asin(Math.sqrt(a)));
+}
+
+function fmtDist(m: number): string {
+  return m < 1000 ? `${m} เมตร` : `${(m / 1000).toFixed(1)} กิโลเมตร`;
+}
+
 async function geocodePlace(query: string): Promise<{ lat: number; lng: number; name: string } | null> {
   // 1. Try hardcoded station/landmark table first (fast + free)
   const station = lookupStation(query);
@@ -528,6 +544,28 @@ export const Route = createFileRoute("/api/chat")({
             }
           }
 
+          // ── Distance Q&A ─────────────────────────────────────────────────
+          // Detect "X ถึง Y กี่เมตร?" / "ระยะจาก X ไป Y" patterns
+          // and answer immediately without doing a property search.
+          const distQARx =
+            /(?:ระยะ(?:ห่าง)?(?:จาก)?|จาก|from|distance(?:\s+from)?)\s+(.{2,30}?)\s+(?:ถึง|ไป(?:ยัง)?|to|->|→)\s+(.{2,30})(?:\s|$|[?!.,])/iu;
+          const distQAm = userText.match(distQARx) ||
+            userText.match(/(.{2,30}?)\s+(?:ถึง|to)\s+(.{2,30}?)\s+(?:กี่เมตร|กี่กิโล|ห่างกัน|ระยะ|distance)/iu);
+
+          let distanceAnswerNote = "";
+          if (distQAm) {
+            const [geoA, geoB] = await Promise.all([
+              geocodePlace(distQAm[1].trim()),
+              geocodePlace(distQAm[2].trim()),
+            ]);
+            if (geoA && geoB) {
+              const meters = haversineM(geoA.lat, geoA.lng, geoB.lat, geoB.lng);
+              distanceAnswerNote =
+                `\n[ข้อมูลระยะทาง] ${geoA.name} ➜ ${geoB.name} = ${fmtDist(meters)} (เส้นตรง Haversine)` +
+                `\nใช้ข้อมูลนี้ตอบคำถามระยะทาง อย่าคาดเดา`;
+            }
+          }
+
           // Language Detection
           const isChinese = /[\u4e00-\u9fa5]/.test(userText);
           const isJapanese = /[\u3040-\u309f\u30a0-\u30ff]/.test(userText);
@@ -768,7 +806,7 @@ If nothing found, return {}.`,
             ? `หลังจากตอบเรื่อง property แล้ว ให้ถามคำถามนี้ 1 ข้อเท่านั้น (ห้ามถามหลายข้อพร้อมกัน): "${nextQuestion}"`
             : `ได้ข้อมูลครบแล้ว เน้นแนะนำ property และนัดดูห้องค่ะ`;
 
-          const SYSTEM_PROMPT = `คุณคือ Estate AI ที่ปรึกษาอสังหาริมทรัพย์ในกรุงเทพฯ มืออาชีพ
+          const SYSTEM_PROMPT = `คุณคือ Estate AI ที่ปรึกษาอสังหาริมทรัพย์ในกรุงเทพฯ มืออาชีพ${distanceAnswerNote}
 ลักษณะการพูด: ใช้ "ค่ะ" ทุกครั้ง สุภาพ อบอุ่น กระชับ เป็นธรรมชาติ
 ตอบสั้น ๆ ได้ใจความ ไม่พูดยืดยาว ไม่ใช้ bullet point ซ้อนกันหลายชั้น ห้ามใช้ emoji ทุกชนิดในทุกคำตอบ
 ตรวจจับภาษาของผู้ใช้แล้วตอบเป็นภาษาเดียวกันเสมอ (ไทย อังกฤษ จีน ญี่ปุ่น) หากภาษาอื่นให้ใช้ "ka" แทน "ค่ะ"
