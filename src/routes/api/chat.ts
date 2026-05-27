@@ -666,7 +666,7 @@ ${missingPrompt}
 รายการ property ที่พบในระบบ (${total} รายการ, วิธีค้นหา: ${searchMode === "sql" ? "keyword filter" : searchMode === "location" ? "geocoding+distance" : "semantic search"}${newFilters.lat ? `, anchor: ${newFilters.lat},${newFilters.lng}` : ""}):
 ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเภท: ${p.propertyType}, ห้องนอน: ${p.bedrooms || "Studio"}, ราคา: ฿${p.price.toLocaleString()}${p.distance_m != null ? `, ระยะ: ${p.distance_m < 1000 ? p.distance_m + "m" : (p.distance_m / 1000).toFixed(1) + "km"}` : ""})`).join("\n")}
 
-ถ้ามี property: แนะนำไม่เกิน 3 รายการ บอกชื่อ ทำเล ห้องนอน ราคา แล้วบอกเหตุผลสั้น ๆ 1 ประโยคว่าเหมาะกับลูกค้าอย่างไร
+ถ้ามี property: แนะนำไม่เกิน 3 รายการ บอกชื่อ ทำเล ห้องนอน ราคา${newFilters.lat ? " และระยะทาง (ใช้คำว่า 'ห่าง X เมตร/กิโลเมตรจากจุดที่คุณระบุ')" : ""} แล้วบอกเหตุผลสั้น ๆ 1 ประโยคว่าเหมาะกับลูกค้าอย่างไร
 ถ้าไม่มี property: แจ้งสั้น ๆ และแนะนำให้ปรับเงื่อนไข
 `;
 
