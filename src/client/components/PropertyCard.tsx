@@ -1,4 +1,4 @@
-﻿import { MapPin, Train, Heart, Building2, TrendingUp, BedDouble, Bath, Maximize2 } from "lucide-react";
+﻿import { MapPin, Train, Heart, Building2, TrendingUp, BedDouble, Bath, Maximize2, Navigation } from "lucide-react";
 import { Badge } from "@/client/components/ui/badge";
 import { type Property } from "@/shared/data/properties";
 import { formatPrice } from "@/shared/lib/filterProperties";
@@ -132,6 +132,17 @@ export function PropertyCard({
             </span>
           )}
         </div>
+
+        {/* Distance badge */}
+        {property.distance_m != null && (
+          <div className="mt-2 flex items-center gap-1 text-xs font-semibold text-sky-500">
+            <Navigation className="h-3 w-3 shrink-0" />
+            {property.distance_m < 1000
+              ? `${property.distance_m} m`
+              : `${(property.distance_m / 1000).toFixed(1)} km`}
+            <span className="text-muted-foreground font-normal">จากจุดอ้างอิง</span>
+          </div>
+        )}
 
         {/* Developer + year */}
         {(property.developer || property.year_built > 0) && (

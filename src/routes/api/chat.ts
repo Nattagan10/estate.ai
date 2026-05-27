@@ -283,6 +283,29 @@ function localExtractFilters(text: string): ExtractionResult {
   const phoneMatch = text.match(/(?:0|\+66)\s?\d{2,3}[-\s]?\d{3}[-\s]?\d{3,4}/);
   if (phoneMatch) phone = phoneMatch[0];
 
+  // Lat/Lng — patterns: (13.xxxx, 100.xxxx) or 13.xxxx, 100.xxxx or lat=13.x lng=100.x
+  const coordMatch = text.match(/\(?\s*([0-9]{1,2}\.[0-9]{3,8})\s*[,،]\s*([0-9]{2,3}\.[0-9]{3,8})\s*\)?/);
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]);
+    const lng = parseFloat(coordMatch[2]);
+    // Basic sanity check for Thailand range
+    if (lat >= 5 && lat <= 21 && lng >= 97 && lng <= 106) {
+      next.lat = lat;
+      next.lng = lng;
+    }
+  }
+
+  // Max distance — patterns: ไม่เกิน 500ม, ไม่เกิน 1km, รัศมี 2 กิโล, within 500m
+  const distMatch =
+    t.match(/(?:ไม่เกิน|รัศมี|ใกล้ใน|within|radius|ระยะ)\s*(\d+(?:\.\d+)?)\s*(km|กิโล|กิโลเมตร|k|m|เมตร|ม\.?)\b/i) ||
+    t.match(/(\d+(?:\.\d+)?)\s*(km|กิโล|กิโลเมตร)\b/i);
+  if (distMatch) {
+    const num = parseFloat(distMatch[1]);
+    const unit = distMatch[2].toLowerCase();
+    const meters = unit.startsWith("k") || unit.includes("กิโล") ? num * 1000 : num;
+    if (meters > 0 && meters <= 50000) next.maxDistanceM = Math.round(meters);
+  }
+
   return { filters: next, resetRequested, name, phone, age, purpose };
 }
 
@@ -640,8 +663,8 @@ ${filterNote}
 
 ${missingPrompt}
 
-รายการ property ที่พบในระบบ (${total} รายการ, วิธีค้นหา: ${searchMode === "sql" ? "keyword filter" : searchMode === "location" ? "geocoding+distance" : "semantic search"}):
-${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเภท: ${p.propertyType}, ห้องนอน: ${p.bedrooms || "Studio"}, ราคา: ฿${p.price.toLocaleString()})`).join("\n")}
+รายการ property ที่พบในระบบ (${total} รายการ, วิธีค้นหา: ${searchMode === "sql" ? "keyword filter" : searchMode === "location" ? "geocoding+distance" : "semantic search"}${newFilters.lat ? `, anchor: ${newFilters.lat},${newFilters.lng}` : ""}):
+${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเภท: ${p.propertyType}, ห้องนอน: ${p.bedrooms || "Studio"}, ราคา: ฿${p.price.toLocaleString()}${p.distance_m != null ? `, ระยะ: ${p.distance_m < 1000 ? p.distance_m + "m" : (p.distance_m / 1000).toFixed(1) + "km"}` : ""})`).join("\n")}
 
 ถ้ามี property: แนะนำไม่เกิน 3 รายการ บอกชื่อ ทำเล ห้องนอน ราคา แล้วบอกเหตุผลสั้น ๆ 1 ประโยคว่าเหมาะกับลูกค้าอย่างไร
 ถ้าไม่มี property: แจ้งสั้น ๆ และแนะนำให้ปรับเงื่อนไข

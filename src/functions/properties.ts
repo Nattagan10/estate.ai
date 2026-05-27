@@ -16,6 +16,10 @@ const FiltersSchema = z.object({
   hasYield: z.boolean().optional(),
   page: z.number().int().min(1).optional(),
   limit: z.number().int().min(1).max(100).optional(),
+  // Distance filter
+  lat: z.number().optional(),
+  lng: z.number().optional(),
+  maxDistanceM: z.number().int().optional(),
 });
 export type SearchFilters = z.infer<typeof FiltersSchema>;
 
@@ -59,6 +63,9 @@ export async function searchPropertiesServer(
     p_sort_by:        f.sortBy ?? "relevance",
     p_min_year:       f.minYearBuilt ?? null,
     p_has_yield:      f.hasYield ?? false,
+    p_lat:            f.lat ?? null,
+    p_lng:            f.lng ?? null,
+    p_max_dist_m:     f.maxDistanceM ?? null,
   });
   if (error) throw new Error(error.message);
 
@@ -88,6 +95,9 @@ export const fetchMapPins = createServerFn({ method: "POST" })
       p_near_transit:   f.nearTransit ?? false,
       p_min_year:       f.minYearBuilt ?? null,
       p_has_yield:      f.hasYield ?? false,
+      p_lat:            f.lat ?? null,
+      p_lng:            f.lng ?? null,
+      p_max_dist_m:     f.maxDistanceM ?? null,
     });
     if (error) throw new Error(error.message);
 

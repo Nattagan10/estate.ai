@@ -28,6 +28,7 @@ export type Property = {
   rental_yield: number | null;
   near_transit: string | null;
   url: string;
+  distance_m?: number | null;   // meters from anchor point (if lat/lng filter used)
 };
 
 export type DbPropertyRow = {
@@ -50,6 +51,7 @@ export type DbPropertyRow = {
   longitude: number | null;
   coord_accurate: boolean | null;
   text_content: string | null;
+  distance_m?: number | null;
 };
 
 function normalizePropertyType(raw: string | null): Property["propertyType"] {
@@ -108,5 +110,6 @@ export function rowToProperty(r: DbPropertyRow): Property {
     rental_yield: r.rental_yield ?? null,
     near_transit: r.near_transit ?? null,
     url: r.url ?? "",
+    distance_m: r.distance_m ?? null,
   };
 }

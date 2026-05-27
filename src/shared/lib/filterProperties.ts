@@ -10,6 +10,10 @@ export type Filters = {
   sortBy?: "price_asc" | "price_desc" | "newest" | "yield";
   minYearBuilt?: number;
   hasYield?: boolean;
+  // Distance filter
+  lat?: number;
+  lng?: number;
+  maxDistanceM?: number;
 };
 
 export function formatPrice(p: { price?: number | null }): string {

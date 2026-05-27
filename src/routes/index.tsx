@@ -22,6 +22,7 @@ import {
   CalendarDays,
   ArrowUpDown,
   Check,
+  Navigation,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { ChatPanel } from "@/client/components/ChatPanel";
@@ -75,6 +76,9 @@ function Index() {
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
   const [ragResults, setRagResults] = useState<Property[] | null>(null);
   const [detailProperty, setDetailProperty] = useState<Property | null>(null);
+  const [anchorPoint, setAnchorPoint] = useState<{ lat: number; lng: number; maxDistanceM?: number } | null>(null);
+  const [anchorInput, setAnchorInput] = useState({ lat: "", lng: "", dist: "" });
+  const [anchorPanelOpen, setAnchorPanelOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -129,17 +133,17 @@ function Index() {
   );
 
   const { data, isLoading } = useQuery({
-    queryKey: ["properties", filters, page],
-    queryFn: () => search({ data: { ...filters, page, limit: ITEMS_PER_PAGE } }),
-    enabled: hasActiveFilters,
+    queryKey: ["properties", filters, page, anchorPoint],
+    queryFn: () => search({ data: { ...filters, ...anchorPoint ?? {}, page, limit: ITEMS_PER_PAGE } }),
+    enabled: hasActiveFilters || !!anchorPoint,
     placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
 
   const { data: mapData } = useQuery({
-    queryKey: ["map-pins", filters],
-    queryFn: () => mapSearch({ data: { ...filters } }),
-    enabled: hasActiveFilters,
+    queryKey: ["map-pins", filters, anchorPoint],
+    queryFn: () => mapSearch({ data: { ...filters, ...anchorPoint ?? {} } }),
+    enabled: hasActiveFilters || !!anchorPoint,
     placeholderData: (prev) => prev,
     staleTime: 60_000,
   });
@@ -524,7 +528,7 @@ function Index() {
             {/* Clear all */}
             {hasActiveFilters && (
               <button
-                onClick={() => { setFilters({}); setFiltersDraft({}); setTypeDraft(new Set()); setLocationInput(""); }}
+                onClick={() => { setFilters({}); setFiltersDraft({}); setTypeDraft(new Set()); setLocationInput(""); setAnchorPoint(null); }}
                 className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-border px-3 text-xs text-muted-foreground hover:text-foreground hover:border-foreground transition"
               >
                 <X className="h-3 w-3" /> ล้างทั้งหมด
@@ -540,18 +544,93 @@ function Index() {
               className="overflow-hidden rounded-2xl border border-border bg-card"
               style={{ boxShadow: "var(--shadow-card)" }}
             >
-              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-accent" />
                   <span className="text-sm font-medium">Live Map</span>
                   <span className="text-xs text-muted-foreground">· {total} matches</span>
                 </div>
-                {filters.area && (
-                  <span className="text-xs font-medium text-destructive">
-                    Highlighting {filters.area}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {filters.area && (
+                    <span className="text-xs font-medium text-destructive">
+                      Highlighting {filters.area}
+                    </span>
+                  )}
+                  {anchorPoint ? (
+                    <div className="flex items-center gap-1.5 rounded-full bg-sky-500/15 border border-sky-500/30 px-2.5 py-1 text-xs text-sky-500 font-medium">
+                      <Navigation className="h-3 w-3" />
+                      {anchorPoint.lat.toFixed(4)}, {anchorPoint.lng.toFixed(4)}
+                      {anchorPoint.maxDistanceM && ` ≤ ${anchorPoint.maxDistanceM >= 1000 ? (anchorPoint.maxDistanceM / 1000).toFixed(1) + "km" : anchorPoint.maxDistanceM + "m"}`}
+                      <button onClick={() => setAnchorPoint(null)} className="ml-0.5 hover:text-red-400">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setAnchorPanelOpen((v) => !v)}
+                      className="flex items-center gap-1 rounded-full border border-border bg-secondary/50 px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-sky-400 transition-colors"
+                    >
+                      <Navigation className="h-3 w-3" /> จุดอ้างอิง
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Anchor point input panel */}
+              {anchorPanelOpen && !anchorPoint && (
+                <div className="border-b border-border bg-secondary/20 px-4 py-3 flex flex-wrap items-end gap-2 text-xs">
+                  <div className="space-y-0.5">
+                    <label className="text-muted-foreground uppercase tracking-wider text-[10px]">Latitude</label>
+                    <input
+                      value={anchorInput.lat}
+                      onChange={(e) => setAnchorInput((p) => ({ ...p, lat: e.target.value }))}
+                      placeholder="13.7563"
+                      className="w-28 rounded border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-sky-400"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <label className="text-muted-foreground uppercase tracking-wider text-[10px]">Longitude</label>
+                    <input
+                      value={anchorInput.lng}
+                      onChange={(e) => setAnchorInput((p) => ({ ...p, lng: e.target.value }))}
+                      placeholder="100.5018"
+                      className="w-28 rounded border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-sky-400"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <label className="text-muted-foreground uppercase tracking-wider text-[10px]">รัศมีสูงสุด (m)</label>
+                    <input
+                      value={anchorInput.dist}
+                      onChange={(e) => setAnchorInput((p) => ({ ...p, dist: e.target.value }))}
+                      placeholder="ว่าง = ไม่จำกัด"
+                      className="w-32 rounded border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-sky-400"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      const lat = parseFloat(anchorInput.lat);
+                      const lng = parseFloat(anchorInput.lng);
+                      const dist = anchorInput.dist ? parseInt(anchorInput.dist) : undefined;
+                      if (!isNaN(lat) && !isNaN(lng) && lat >= 5 && lat <= 21 && lng >= 97 && lng <= 106) {
+                        setAnchorPoint({ lat, lng, maxDistanceM: dist });
+                        setAnchorPanelOpen(false);
+                      }
+                    }}
+                    className="rounded bg-sky-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-600"
+                  >
+                    ตั้งจุด
+                  </button>
+                  <button
+                    onClick={() => setAnchorPanelOpen(false)}
+                    className="text-muted-foreground hover:text-foreground px-1 py-1.5"
+                  >
+                    ยกเลิก
+                  </button>
+                  <p className="w-full text-[10px] text-muted-foreground mt-0.5">
+                    💡 หรือพูดในแชท เช่น "หาคอนโดใกล้ (13.7383, 100.5602) ไม่เกิน 1km"
+                  </p>
+                </div>
+              )}
               <div className="h-[340px] w-full">
                 <Suspense
                   fallback={
@@ -720,7 +799,16 @@ function Index() {
             <ChatPanel
               key={chatKey}
               filters={filters}
-              onFiltersChange={setFilters}
+              onFiltersChange={(f) => {
+                // If chat sends lat/lng, sync to anchorPoint state
+                if (f.lat && f.lng) {
+                  setAnchorPoint({ lat: f.lat, lng: f.lng, maxDistanceM: f.maxDistanceM });
+                  const { lat: _l, lng: _g, maxDistanceM: _d, ...rest } = f;
+                  setFilters(rest);
+                } else {
+                  setFilters(f);
+                }
+              }}
               sessionId={sessionId}
               onSessionChange={setSessionId}
               onNewChat={startNewChat}
