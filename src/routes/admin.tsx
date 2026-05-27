@@ -10,12 +10,16 @@ import {
   adminListProperties,
   adminUpsertProperty,
   adminDeleteProperty,
+  adminGetApiLogs,
   type AdminPropertyRow,
 } from "@/functions/admin";
 import { toast } from "sonner";
 import { Toaster } from "@/client/components/ui/sonner";
 import {
+  Activity,
   Building2,
+  ChevronDown,
+  ChevronRight,
   Database,
   LogOut,
   MessageSquare,
@@ -48,7 +52,7 @@ const TOKEN_KEY = "estate_admin_token";
 
 function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"sessions" | "properties">("sessions");
+  const [activeTab, setActiveTab] = useState<"sessions" | "properties" | "logs">("sessions");
 
   useEffect(() => {
     setToken(localStorage.getItem(TOKEN_KEY));
@@ -98,6 +102,14 @@ function AdminPage() {
               >
                 <Database className="h-3.5 w-3.5" /> Properties
               </button>
+              <button
+                onClick={() => setActiveTab("logs")}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activeTab === "logs" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Activity className="h-3.5 w-3.5" /> API Logs
+              </button>
             </div>
             <Link to="/" className="text-xs text-muted-foreground hover:text-foreground">
               View site
@@ -118,8 +130,10 @@ function AdminPage() {
       <main className="mx-auto max-w-[1400px] px-6 py-6">
         {activeTab === "sessions" ? (
           <SessionsView token={token} />
-        ) : (
+        ) : activeTab === "properties" ? (
           <PropertiesView token={token} />
+        ) : (
+          <ApiLogsView token={token} />
         )}
       </main>
     </div>
@@ -675,6 +689,215 @@ function PropertiesView({ token }: { token: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---- API Logs View ----
+
+function ApiLogsView({ token }: { token: string }) {
+  const getFn = useServerFn(adminGetApiLogs);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const { data, isFetching, refetch } = useQuery({
+    queryKey: ["admin-api-logs"],
+    queryFn: () => getFn({ data: { token, limit: 100 } }),
+    refetchInterval: 5000,
+  });
+
+  const logs = data?.logs ?? [];
+
+  const langColor = (lang: string | null) => {
+    if (!lang) return "bg-muted text-muted-foreground";
+    if (lang === "Thai") return "bg-amber-500/20 text-amber-400";
+    if (lang === "English") return "bg-sky-500/20 text-sky-400";
+    if (lang === "Chinese") return "bg-red-500/20 text-red-400";
+    if (lang === "Japanese") return "bg-pink-500/20 text-pink-400";
+    return "bg-muted text-muted-foreground";
+  };
+
+  const modeColor = (mode: string | null) => {
+    if (mode === "semantic") return "bg-purple-500/20 text-purple-400";
+    if (mode === "sql") return "bg-emerald-500/20 text-emerald-400";
+    return "bg-muted text-muted-foreground";
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium text-sm">API Request Logs</span>
+          <span className="text-xs text-muted-foreground">({logs.length} recent)</span>
+        </div>
+        <button
+          onClick={() => refetch()}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          Refresh
+        </button>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
+        {logs.length === 0 && !isFetching && (
+          <div className="p-8 text-center text-xs text-muted-foreground">
+            No API logs yet. Send a chat message to generate logs.
+          </div>
+        )}
+        {logs.map((log: any) => {
+          const isOpen = expanded === log.id;
+          const hasError = !!log.error;
+          const filters = log.merged_filters ?? {};
+          const localF = log.local_filters ?? {};
+          const aiProfile = log.ai_profile ?? {};
+          const sample = log.properties_sample ?? [];
+
+          return (
+            <div key={log.id} className={hasError ? "border-l-2 border-l-destructive" : ""}>
+              {/* Summary row */}
+              <button
+                className="w-full text-left px-4 py-3 hover:bg-secondary/30 flex items-start gap-3"
+                onClick={() => setExpanded(isOpen ? null : log.id)}
+              >
+                <span className="mt-0.5 shrink-0 text-muted-foreground">
+                  {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${langColor(log.detected_lang)}`}>
+                      {log.detected_lang ?? "?"}
+                    </span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${modeColor(log.search_mode)}`}>
+                      {log.search_mode ?? "?"}
+                    </span>
+                    {log.properties_total != null && (
+                      <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[10px] font-medium">
+                        {log.properties_total} props
+                      </span>
+                    )}
+                    {log.duration_ms != null && (
+                      <span className="text-[10px] text-muted-foreground">{log.duration_ms}ms</span>
+                    )}
+                    {hasError && (
+                      <span className="rounded-full bg-destructive/20 text-destructive px-2 py-0.5 text-[10px] font-medium">
+                        ERROR
+                      </span>
+                    )}
+                    <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
+                      {new Date(log.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-sm truncate text-foreground/80">
+                    {log.user_message || <span className="italic text-muted-foreground">(no message)</span>}
+                  </div>
+                  {/* Compact filter pills */}
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {filters.area && (
+                      <span className="rounded bg-accent/10 text-accent px-1.5 py-0.5 text-[10px]">📍 {filters.area}</span>
+                    )}
+                    {filters.propertyType && (
+                      <span className="rounded bg-primary/10 text-primary px-1.5 py-0.5 text-[10px]">{filters.propertyType}</span>
+                    )}
+                    {filters.maxPrice && (
+                      <span className="rounded bg-emerald-500/10 text-emerald-500 px-1.5 py-0.5 text-[10px]">
+                        ฿{Number(filters.maxPrice).toLocaleString()}
+                      </span>
+                    )}
+                    {filters.nearTransit && (
+                      <span className="rounded bg-sky-500/10 text-sky-500 px-1.5 py-0.5 text-[10px]">🚇 transit</span>
+                    )}
+                    {localF.resetRequested && (
+                      <span className="rounded bg-orange-500/10 text-orange-500 px-1.5 py-0.5 text-[10px]">↺ reset</span>
+                    )}
+                  </div>
+                </div>
+              </button>
+
+              {/* Expanded detail */}
+              {isOpen && (
+                <div className="px-4 pb-4 grid md:grid-cols-2 gap-4 bg-secondary/10 border-t border-border">
+                  {/* Left: Filters + Local extraction */}
+                  <div className="space-y-3 pt-3">
+                    <Section label="Merged Filters (sent to search)">
+                      <JsonBlock data={filters} />
+                    </Section>
+                    <Section label="Local Regex Extraction">
+                      <JsonBlock data={localF} />
+                    </Section>
+                    {Object.keys(aiProfile).length > 0 && (
+                      <Section label="AI Profile Extraction (Haiku)">
+                        <JsonBlock data={aiProfile} />
+                      </Section>
+                    )}
+                    {hasError && (
+                      <Section label="Error">
+                        <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-2 text-xs text-destructive font-mono">
+                          {log.error}
+                        </div>
+                      </Section>
+                    )}
+                  </div>
+
+                  {/* Right: Properties found */}
+                  <div className="space-y-3 pt-3">
+                    <Section label={`Properties Found (${log.properties_total ?? 0} total, showing ${sample.length})`}>
+                      {sample.length > 0 ? (
+                        <div className="space-y-1">
+                          {sample.map((p: any, i: number) => (
+                            <div key={i} className="rounded-lg bg-background/60 border border-border px-2.5 py-2 text-xs">
+                              <div className="font-medium truncate">{p.name}</div>
+                              <div className="text-muted-foreground mt-0.5">
+                                {p.area} · {p.type} · ฿{Number(p.price).toLocaleString()}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground italic">No properties returned</div>
+                      )}
+                    </Section>
+                    <Section label="Response">
+                      <div className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{log.response_length ?? 0}</span> chars ·{" "}
+                        <span className="font-medium text-foreground">{log.duration_ms ?? "?"}ms</span> total ·{" "}
+                        session: <span className="font-mono">{log.session_id ? log.session_id.slice(0, 8) + "…" : "—"}</span>
+                      </div>
+                    </Section>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function JsonBlock({ data }: { data: Record<string, any> }) {
+  const entries = Object.entries(data).filter(([, v]) => v !== undefined && v !== null && v !== false);
+  if (entries.length === 0)
+    return <div className="text-xs text-muted-foreground italic">—</div>;
+  return (
+    <div className="rounded-lg bg-background/60 border border-border p-2 space-y-1">
+      {entries.map(([k, v]) => (
+        <div key={k} className="flex items-start gap-2 text-xs">
+          <span className="shrink-0 text-muted-foreground font-mono w-28 truncate">{k}</span>
+          <span className="text-foreground/80 break-all">
+            {typeof v === "object" ? JSON.stringify(v) : String(v)}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

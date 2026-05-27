@@ -137,6 +137,21 @@ export const adminDeleteProperty = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const adminGetApiLogs = createServerFn({ method: "POST" })
+  .inputValidator((d: { token: string; limit?: number }) =>
+    z.object({ token: z.string(), limit: z.number().optional() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    assertToken(data.token);
+    const { data: rows, error } = await supabaseAdmin
+      .from("api_request_logs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(data.limit ?? 100);
+    if (error) throw new Error(error.message);
+    return { logs: rows ?? [] };
+  });
+
 export const adminDeleteSession = createServerFn({ method: "POST" })
   .inputValidator((d: { token: string; sessionId: string }) =>
     z.object({ token: z.string(), sessionId: z.string().uuid() }).parse(d),

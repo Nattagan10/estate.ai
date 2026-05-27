@@ -354,6 +354,7 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const _reqStart = Date.now();
         try {
           const body = (await request.json()) as ReqBody;
           const messages = body.messages ?? [];
@@ -760,12 +761,44 @@ ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเ
                   /* noop */
                 }
               }
+
+              // Log detailed API request/response for admin monitoring
+              try {
+                await supabaseAdmin.from("api_request_logs").insert({
+                  session_id: activeSessionId ?? null,
+                  user_message: userText,
+                  detected_lang: detectedLang,
+                  local_filters: { ...extracted, resetRequested } as any,
+                  ai_profile: aiExtractedProfile as any,
+                  merged_filters: newFilters as any,
+                  search_mode: searchMode,
+                  properties_total: total,
+                  properties_sample: properties.slice(0, 5).map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    area: p.area_name,
+                    type: p.propertyType,
+                    price: p.price,
+                  })) as any,
+                  response_length: fullResponse.length,
+                  duration_ms: Date.now() - _reqStart,
+                });
+              } catch (e) {
+                /* noop */
+              }
             },
           });
 
           return new Response(stream, { headers: { "Content-Type": "text/event-stream" } });
         } catch (e) {
           console.error("Local chat handler error", e);
+          // Log error to api_request_logs
+          try {
+            await supabaseAdmin.from("api_request_logs").insert({
+              error: e instanceof Error ? e.message : String(e),
+              duration_ms: Date.now() - _reqStart,
+            });
+          } catch (_) { /* noop */ }
           return new Response(
             JSON.stringify({ error: e instanceof Error ? e.message : "Server error" }),
             { status: 500 },

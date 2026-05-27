@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_request_logs: {
+        Row: {
+          ai_profile: Json | null
+          created_at: string | null
+          detected_lang: string | null
+          duration_ms: number | null
+          error: string | null
+          id: string
+          local_filters: Json | null
+          merged_filters: Json | null
+          properties_sample: Json | null
+          properties_total: number | null
+          response_length: number | null
+          search_mode: string | null
+          session_id: string | null
+          user_message: string | null
+        }
+        Insert: {
+          ai_profile?: Json | null
+          created_at?: string | null
+          detected_lang?: string | null
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          local_filters?: Json | null
+          merged_filters?: Json | null
+          properties_sample?: Json | null
+          properties_total?: number | null
+          response_length?: number | null
+          search_mode?: string | null
+          session_id?: string | null
+          user_message?: string | null
+        }
+        Update: {
+          ai_profile?: Json | null
+          created_at?: string | null
+          detected_lang?: string | null
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          local_filters?: Json | null
+          merged_filters?: Json | null
+          properties_sample?: Json | null
+          properties_total?: number | null
+          response_length?: number | null
+          search_mode?: string | null
+          session_id?: string | null
+          user_message?: string | null
+        }
+        Relationships: []
+      }
       chat_logs: {
         Row: {
           content: string
@@ -101,6 +152,7 @@ export type Database = {
           created_at: string | null
           developer: string | null
           district: string | null
+          district_canonical: string | null
           id: string
           latitude: number | null
           longitude: number | null
@@ -123,6 +175,7 @@ export type Database = {
           created_at?: string | null
           developer?: string | null
           district?: string | null
+          district_canonical?: string | null
           id: string
           latitude?: number | null
           longitude?: number | null
@@ -145,6 +198,7 @@ export type Database = {
           created_at?: string | null
           developer?: string | null
           district?: string | null
+          district_canonical?: string | null
           id?: string
           latitude?: number | null
           longitude?: number | null
@@ -196,6 +250,35 @@ export type Database = {
         }
         Returns: boolean
       }
+      rpc_fetch_map_pins: {
+        Args: {
+          p_area?: string
+          p_has_yield?: boolean
+          p_max_price?: number
+          p_min_price?: number
+          p_min_year?: number
+          p_near_transit?: boolean
+          p_property_types?: string[]
+        }
+        Returns: Json
+      }
+      rpc_search_properties: {
+        Args: {
+          p_area?: string
+          p_has_yield?: boolean
+          p_limit?: number
+          p_max_price?: number
+          p_min_price?: number
+          p_min_year?: number
+          p_near_transit?: boolean
+          p_page?: number
+          p_property_types?: string[]
+          p_sort_by?: string
+        }
+        Returns: Json
+      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "admin" | "user"
