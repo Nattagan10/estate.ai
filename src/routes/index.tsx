@@ -27,7 +27,6 @@ import { Link } from "@tanstack/react-router";
 import { ChatPanel } from "@/client/components/ChatPanel";
 import { PropertyCard } from "@/client/components/PropertyCard";
 import { HeroCarousel } from "@/client/components/HeroCarousel";
-import { PropertyRow } from "@/client/components/PropertyRow";
 import { FavoritesModal } from "@/client/components/FavoritesModal";
 import { PROPERTY_TYPE_LABEL, type Filters } from "@/shared/lib/filterProperties";
 import { searchProperties, fetchMapPins } from "@/functions/properties";
@@ -345,15 +344,6 @@ function Index() {
       </header>
 
       <HeroCarousel />
-      {results.length > 0 && (
-        <PropertyRow
-          properties={results.slice(0, 15)}
-          onViewMap={(id) => {
-            handleSelectProperty(id);
-            document.getElementById('map-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }}
-        />
-      )}
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 md:px-6 md:py-8">
         {/* Search row */}
