@@ -8,6 +8,7 @@ type Props = {
   isFavorite: boolean;
   onToggleFavorite: (id: string) => void;
   onFocus: (id: string) => void;
+  onDetail: (property: Property) => void;
   highlighted?: boolean;
 };
 
@@ -31,6 +32,7 @@ export function PropertyCard({
   isFavorite,
   onToggleFavorite,
   onFocus,
+  onDetail,
   highlighted,
 }: Props) {
   const transit = property.near_transit;
@@ -41,7 +43,7 @@ export function PropertyCard({
 
   return (
     <div
-      onClick={() => onFocus(property.id)}
+      onClick={() => onDetail(property)}
       className={`group cursor-pointer rounded-2xl bg-card overflow-hidden border transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
         highlighted ? "ring-2 ring-accent shadow-[var(--shadow-glow)]" : "border-border"
       }`}
@@ -151,6 +153,17 @@ export function PropertyCard({
             ))}
           </div>
         )}
+
+        {/* Footer actions */}
+        <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+          <button
+            onClick={(e) => { e.stopPropagation(); onFocus(property.id); document.getElementById("map-container")?.scrollIntoView({ behavior: "smooth", block: "center" }); }}
+            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-accent transition-colors"
+          >
+            <MapPin className="h-3 w-3" /> View on Map
+          </button>
+          <span className="text-[11px] text-muted-foreground/50">คลิกดูรายละเอียด →</span>
+        </div>
       </div>
     </div>
   );

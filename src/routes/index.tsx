@@ -28,6 +28,7 @@ import { ChatPanel } from "@/client/components/ChatPanel";
 import { PropertyCard } from "@/client/components/PropertyCard";
 import { HeroCarousel } from "@/client/components/HeroCarousel";
 import { FavoritesModal } from "@/client/components/FavoritesModal";
+import { PropertyModal } from "@/client/components/PropertyModal";
 import { PROPERTY_TYPE_LABEL, type Filters } from "@/shared/lib/filterProperties";
 import { searchProperties, fetchMapPins } from "@/functions/properties";
 import { Popover, PopoverContent, PopoverTrigger } from "@/client/components/ui/popover";
@@ -73,6 +74,7 @@ function Index() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
   const [ragResults, setRagResults] = useState<Property[] | null>(null);
+  const [detailProperty, setDetailProperty] = useState<Property | null>(null);
 
   useEffect(() => {
     try {
@@ -612,6 +614,7 @@ function Index() {
                         isFavorite={favorites.has(p.id)}
                         onToggleFavorite={toggleFavorite}
                         onFocus={handleSelectProperty}
+                        onDetail={setDetailProperty}
                         highlighted={focusedId === p.id}
                       />
                     ))}
@@ -658,6 +661,7 @@ function Index() {
                         isFavorite={favorites.has(p.id)}
                         onToggleFavorite={toggleFavorite}
                         onFocus={handleSelectProperty}
+                        onDetail={setDetailProperty}
                         highlighted={focusedId === p.id}
                       />
                     ))}
@@ -740,15 +744,47 @@ function Index() {
         </div>
       </footer>
 
-      <FavoritesModal 
-        isOpen={isFavoritesOpen} 
-        onClose={() => setIsFavoritesOpen(false)} 
+      <FavoritesModal
+        isOpen={isFavoritesOpen}
+        onClose={() => setIsFavoritesOpen(false)}
         favorites={favoriteProperties}
         onRemoveFavorite={toggleFavorite}
         onViewMap={(id) => {
           setIsFavoritesOpen(false);
           handleSelectProperty(id);
           document.getElementById('map-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }}
+      />
+
+      {/* Property Detail Modal — opened from Results grid */}
+      <PropertyModal
+        isOpen={!!detailProperty}
+        onClose={() => setDetailProperty(null)}
+        property={detailProperty ? {
+          id: detailProperty.id,
+          title: detailProperty.name,
+          description: detailProperty.description,
+          image: detailProperty.image,
+          price: detailProperty.price,
+          price_per_sqm: detailProperty.price_per_sqm,
+          tags: detailProperty.tags,
+          propertyType: detailProperty.propertyType,
+          area_name: detailProperty.area_name,
+          developer: detailProperty.developer,
+          year_built: detailProperty.year_built,
+          nbr_floors: detailProperty.nbr_floors,
+          rental_yield: detailProperty.rental_yield,
+          near_transit: detailProperty.near_transit,
+          district: detailProperty.district,
+          province: detailProperty.province,
+          url: detailProperty.url,
+        } : null}
+        onViewMap={() => {
+          if (detailProperty) {
+            setDetailProperty(null);
+            handleSelectProperty(detailProperty.id);
+            document.getElementById('map-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
         }}
       />
     </div>
