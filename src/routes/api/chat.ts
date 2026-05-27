@@ -1,6 +1,6 @@
 ﻿import { createFileRoute } from "@tanstack/react-router";
 import { searchPropertiesServer, type SearchFilters } from "@/functions/properties";
-import { rowToProperty, type DbPropertyRow } from "@/shared/data/properties";
+import { rowToProperty, type DbPropertyRow, type Property } from "@/shared/data/properties";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -113,23 +113,93 @@ async function geocodePlace(query: string): Promise<{ lat: number; lng: number; 
   return null;
 }
 
+type RagResult = {
+  properties: Property[];
+  total: number;
+  mode: string;
+  answer?: string;  // Ready-made Claude answer from Python service (includes distance info)
+};
+
 async function searchWithRAG(
   query: string,
-  topK = 12,
-): Promise<{ properties: ReturnType<typeof rowToProperty>[]; total: number; mode: string } | null> {
+  history: Msg[],
+): Promise<RagResult | null> {
   const base = process.env.RAG_SERVICE_URL;
   if (!base) return null;
   try {
-    const resp = await fetch(`${base}/search`, {
+    // Call POST /chat — the real endpoint in app.py
+    const resp = await fetch(`${base}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, top_k: topK }),
-      signal: AbortSignal.timeout(6000),
+      body: JSON.stringify({
+        query,
+        history: history.map((m) => ({ role: m.role, content: m.content })),
+      }),
+      signal: AbortSignal.timeout(20000), // geocoding + Claude can take up to 15s
     });
     if (!resp.ok) return null;
-    const data = await resp.json();
-    const rows: DbPropertyRow[] = data.results ?? [];
-    return { properties: rows.map(rowToProperty), total: rows.length, mode: data.mode ?? "semantic" };
+
+    const data = await resp.json() as {
+      answer: string;
+      mode: string;
+      sources: Array<{
+        name?: string;
+        type?: string;
+        district?: string;
+        province?: string;
+        price_thb?: number;
+        latitude?: number;
+        longitude?: number;
+        distance_km?: number;
+        url?: string;
+      }>;
+    };
+
+    // Convert RAG sources → full Property shape for the map
+    const ts = Date.now();
+    const properties: Property[] = (data.sources ?? []).map((s, i) => {
+      const district = s.district ?? "";
+      const province = s.province ?? "";
+      return {
+        id: `rag-${i}-${ts}`,
+        name: s.name ?? "",
+        description: "",
+        price: s.price_thb ?? 0,
+        listingType: "sale" as const,
+        propertyType: (["condo","house","townhouse","commercial"].includes(
+          (s.type ?? "").toLowerCase()
+        ) ? (s.type ?? "condo").toLowerCase() : "condo") as Property["propertyType"],
+        bedrooms: 0,
+        bathrooms: 0,
+        area: 0,
+        area_name: [district, province].filter(Boolean).join(", "),
+        lat: s.latitude ?? 13.7563,
+        lng: s.longitude ?? 100.5018,
+        address: [district, province].filter(Boolean).join(", "),
+        image: "",
+        availability: "available" as const,
+        nearby: [],
+        tags: [],
+        province,
+        district,
+        neighborhood: "",
+        developer: "",
+        price_per_sqm: 0,
+        year_built: 0,
+        nbr_floors: 0,
+        rental_yield: null,
+        near_transit: null,
+        url: s.url ?? "",
+        distance_m: s.distance_km != null ? Math.round(s.distance_km * 1000) : null,
+      };
+    });
+
+    return {
+      properties,
+      total: properties.length,
+      mode: data.mode ?? "semantic",
+      answer: data.answer,
+    };
   } catch {
     return null;
   }
@@ -525,21 +595,40 @@ export const Route = createFileRoute("/api/chat")({
           let newFilters = resetRequested ? { ...extracted } : { ...prevFilters, ...extracted };
 
           // ── Place-name geocoding ──────────────────────────────────────────
-          // If no explicit lat/lng already extracted, detect "ใกล้ X" / "near X" patterns
-          // and geocode to coordinates.
+          // Detect "ใกล้X" / "near X" / "แถวX" patterns and geocode to coordinates.
+          // NOTE: Thai text has NO spaces between words, so use \s* not \s+.
           let geocodedPlaceName: string | null = null;
           if (!newFilters.lat && !newFilters.lng) {
             const placeRx =
-              /(?:ใกล้|near|close to|ติด|proximity|ห่าง(?:จาก)?|แถว(?:ๆ)?)\s+([^,.!?()]{2,40})(?:\s+(?:ไม่เกิน|รัศมี|within|ใน\s*\d|\d+\s*(?:km|กิโล|m|เมตร))|[,.!?]|$)/iu;
+              /(?:ใกล้(?:กับ|เคียง|ๆ)?|near|close to|ติด(?:กับ)?|ห่าง(?:จาก|ออกไป)?|แถว(?:ๆ)?|บริเวณ(?:ใกล้เคียง)?|proximity(?:\s+to)?)\s*([^\s,.!?(){}]{2,}(?:\s+[^\s,.!?(){}]{1,}){0,4})(?:\s+(?:ไม่เกิน|รัศมี|within|ประมาณ|\d)|[,.!?\n]|$)/iu;
             const m = userText.match(placeRx);
             if (m) {
-              const placeName = m[1].trim().replace(/\s*(bts|mrt|สถานี)\s*/gi, " $1 ").trim();
-              const geo = await geocodePlace(placeName);
-              if (geo) {
-                newFilters = { ...newFilters, lat: geo.lat, lng: geo.lng };
-                geocodedPlaceName = geo.name;
-                // Default 2km radius if user said "ใกล้" without specifying distance
-                if (!newFilters.maxDistanceM) newFilters.maxDistanceM = 2000;
+              // Clean up: remove trailing Thai particles (นะ ค่ะ ครับ มั้ย หน่อย)
+              const rawPlace = m[1].trim();
+              const placeName = rawPlace
+                .replace(/\s*(bts|mrt|สถานี)\s*/gi, " $1 ")
+                .replace(/\s*(นะ|ค่ะ|ครับ|มั้ย|หน่อย|ด้วย|ได้มั้ย)$/i, "")
+                .trim();
+              if (placeName.length >= 2) {
+                const geo = await geocodePlace(placeName);
+                if (geo) {
+                  newFilters = { ...newFilters, lat: geo.lat, lng: geo.lng };
+                  geocodedPlaceName = geo.name;
+                  // Default 2km radius if user said "ใกล้" without specifying distance
+                  if (!newFilters.maxDistanceM) newFilters.maxDistanceM = 2000;
+                }
+              }
+            }
+
+            // ── Auto-geocode from area mapping ───────────────────────────
+            // If area was matched via keyword but no lat/lng set yet,
+            // look up the coordinates from STATION_COORDS so distance_m is computed.
+            if (!newFilters.lat && newFilters.area) {
+              const areaGeo = lookupStation(newFilters.area);
+              if (areaGeo) {
+                newFilters = { ...newFilters, lat: areaGeo.lat, lng: areaGeo.lng };
+                geocodedPlaceName = areaGeo.name;
+                if (!newFilters.maxDistanceM) newFilters.maxDistanceM = 3000; // 3km default for area search
               }
             }
           }
@@ -698,19 +787,21 @@ If nothing found, return {}.`,
             }
           }
 
-          // 4. Search properties — semantic (bot_reccomend) with SQL fallback
+          // 4. Search properties — bot_reccomend (Python RAG) first, SQL fallback
           let didDropFilters = false;
           let nearbyFallback = false;
           let searchMode = "sql";
 
-          // Try semantic search first
-          const ragResult = await searchWithRAG(userText, 12);
+          // Try bot_reccomend Python service first (handles geocoding + distance + Claude)
+          const ragResult = await searchWithRAG(userText, messages.slice(0, -1));
           let properties = ragResult?.properties ?? [];
           let total = ragResult?.total ?? 0;
+          let ragAnswer: string | undefined = ragResult?.answer; // Ready-made answer with distance info
           if (ragResult) searchMode = ragResult.mode;
 
           // Fall back to SQL if RAG unavailable or returned nothing
           if (!ragResult || total === 0) {
+            ragAnswer = undefined; // Don't use RAG answer if no results
             const sqlResult = await searchPropertiesServer({ ...newFilters, limit: 12 });
             properties = sqlResult.properties;
             total = sqlResult.total;
@@ -832,49 +923,64 @@ ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเ
 
               let fullResponse = "";
               try {
-                const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-                // Send only the last 20 messages to Claude to avoid token limits
-                const MAX_HISTORY = 20;
-                const history: Anthropic.MessageParam[] = messages
-                  .slice(0, -1)
-                  .slice(-MAX_HISTORY)
-                  .map((m) => ({
-                    role: m.role as "user" | "assistant",
-                    content: m.content,
-                  }));
-
-                if (process.env.NODE_ENV === "development") {
-                  console.log(`[Dev] Claude request started for session: ${activeSessionId}`);
-                  console.log(`[Dev] Extracted Filters:`, newFilters);
-                }
-
-                let detectedAiLocation: string | null = null;
-
-                const claudeStream = anthropic.messages.stream({
-                  model: "claude-sonnet-4-6",
-                  max_tokens: 1024,
-                  system: SYSTEM_PROMPT,
-                  messages: [...history, { role: "user", content: userText }],
-                });
-
-                for await (const event of claudeStream) {
-                  if (
-                    event.type === "content_block_delta" &&
-                    event.delta.type === "text_delta"
-                  ) {
-                    const text = event.delta.text;
-                    fullResponse += text;
-                    const textEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+                // ── If bot_reccomend answered, stream it directly ──────────
+                if (ragAnswer) {
+                  if (process.env.NODE_ENV === "development") {
+                    console.log(`[Dev] Using bot_reccomend answer (mode: ${searchMode})`);
+                  }
+                  fullResponse = ragAnswer;
+                  // Stream in chunks of ~80 chars so the UI feels live
+                  const CHUNK = 80;
+                  for (let i = 0; i < ragAnswer.length; i += CHUNK) {
+                    const chunk = ragAnswer.slice(i, i + CHUNK);
+                    const textEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`;
                     controller.enqueue(enc.encode(textEvent));
+                  }
+                } else {
+                  // ── Fallback: ask Claude directly ─────────────────────────
+                  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-                    // On-the-fly location detection
-                    if (!newFilters.area && !detectedAiLocation) {
-                      const aiExtracted = localExtractFilters(fullResponse);
-                      if (aiExtracted.filters.area) {
-                        detectedAiLocation = aiExtracted.filters.area;
-                        const filterEvent = `event: filters\ndata: ${JSON.stringify({ filters: { ...newFilters, area: detectedAiLocation }, total, sessionId: activeSessionId })}\n\n`;
-                        controller.enqueue(enc.encode(filterEvent));
+                  const MAX_HISTORY = 20;
+                  const chatHistory: Anthropic.MessageParam[] = messages
+                    .slice(0, -1)
+                    .slice(-MAX_HISTORY)
+                    .map((m) => ({
+                      role: m.role as "user" | "assistant",
+                      content: m.content,
+                    }));
+
+                  if (process.env.NODE_ENV === "development") {
+                    console.log(`[Dev] Claude request started for session: ${activeSessionId}`);
+                    console.log(`[Dev] Extracted Filters:`, newFilters);
+                  }
+
+                  let detectedAiLocation: string | null = null;
+
+                  const claudeStream = anthropic.messages.stream({
+                    model: "claude-sonnet-4-6",
+                    max_tokens: 1024,
+                    system: SYSTEM_PROMPT,
+                    messages: [...chatHistory, { role: "user", content: userText }],
+                  });
+
+                  for await (const event of claudeStream) {
+                    if (
+                      event.type === "content_block_delta" &&
+                      event.delta.type === "text_delta"
+                    ) {
+                      const text = event.delta.text;
+                      fullResponse += text;
+                      const textEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+                      controller.enqueue(enc.encode(textEvent));
+
+                      // On-the-fly location detection
+                      if (!newFilters.area && !detectedAiLocation) {
+                        const aiExtracted = localExtractFilters(fullResponse);
+                        if (aiExtracted.filters.area) {
+                          detectedAiLocation = aiExtracted.filters.area;
+                          const filterEvent = `event: filters\ndata: ${JSON.stringify({ filters: { ...newFilters, area: detectedAiLocation }, total, sessionId: activeSessionId })}\n\n`;
+                          controller.enqueue(enc.encode(filterEvent));
+                        }
                       }
                     }
                   }

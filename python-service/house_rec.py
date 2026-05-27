@@ -341,20 +341,44 @@ def road_distance_batch(
     return results
 
 
+# Quick regex patterns to extract place names without LLM call
+# Thai words have no internal spaces, so [^\s,...]{2,40} captures one compound Thai word correctly.
+# We stop before budget/price/distance keywords to avoid capturing too much.
+_PLACE_REGEX = re.compile(
+    r"(?:ใกล้(?:กับ|เคียง|ๆ)?|near|close to|ติด(?:กับ)?|แถว(?:ๆ)?|บริเวณ|ห่าง(?:จาก)?|proximity(?:\s+to)?)\s*"
+    r"([^\s,.!?(){}]{2,40}(?:\s+(?!ราคา|งบ|ไม่เกิน|รัศมี|กิโล|เมตร|บาท|ล้าน|แสน|budget|price|within|radius)[^\s,.!?(){}]{1,30}){0,2})",
+    re.IGNORECASE | re.UNICODE,
+)
+_CLEAN_PARTICLES = re.compile(r"\s*(นะ|ค่ะ|ครับ|มั้ย|หน่อย|ด้วย|ได้มั้ย|บ้าง)$", re.UNICODE)
+
+
 def extract_place_name(query: str, llm: anthropic.Anthropic) -> str:
     if _NO_PLACE_RE.match(query.strip()):
         return ""
-    resp = llm.messages.create(
-        model=CLAUDE_MODEL, max_tokens=40, temperature=0,
-        system=(
-            "Extract ONLY the place name, landmark, BTS/MRT station, "
-            "shopping mall, hospital, district, or area from the user message. "
-            "Return ONLY the place name in its original language (Thai or English). "
-            "If no specific place is mentioned, return empty string."
-        ),
-        messages=[{"role": "user", "content": query}],
-    )
-    return resp.content[0].text.strip()
+
+    # Fast path: regex extraction (no LLM call needed for common patterns)
+    m = _PLACE_REGEX.search(query)
+    if m:
+        place = _CLEAN_PARTICLES.sub("", m.group(1).strip())
+        if len(place) >= 2:
+            return place
+
+    # Slow path: LLM extraction for complex queries — use Haiku for speed
+    try:
+        resp = llm.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=40, temperature=0,
+            system=(
+                "Extract ONLY the place name, landmark, BTS/MRT station, "
+                "shopping mall, hospital, district, or area from the user message. "
+                "Return ONLY the place name in its original language (Thai or English). "
+                "If no specific place is mentioned, return empty string."
+            ),
+            messages=[{"role": "user", "content": query}],
+        )
+        return resp.content[0].text.strip()
+    except Exception:
+        return ""
 
 
 def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -483,8 +507,8 @@ def build_rag_context(results: list[tuple], mode: str, geocoded_place: str | Non
 def rag_chat(
     user_query: str,
     history: list[dict],
-    embed_model: BGEM3FlagModel,
-    idx: faiss.Index,
+    embed_model: "BGEM3FlagModel | None",
+    idx: "faiss.Index | None",
     docs: list[dict],
     llm: anthropic.Anthropic,
 ) -> tuple[str, list[tuple], str]:
@@ -501,6 +525,12 @@ def rag_chat(
     if location_results:
         results = location_results[:TOP_K]
         mode    = "location"
+    elif embed_model is None or idx is None:
+        # Semantic model not ready yet — return location fallback with empty results
+        results        = []
+        mode           = "semantic"
+        geocoded_place = None
+        dist_label     = "เส้นตรง"
     else:
         semantic_results = retrieve_semantic(user_query, embed_model, idx, docs)
         api_key  = os.getenv("GOOGLE_MAPS_API_KEY", "")
