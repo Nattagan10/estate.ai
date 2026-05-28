@@ -61,9 +61,7 @@ function Index() {
   const [favoriteItems, setFavoriteItems] = useState<Property[]>([]);
   const favorites = useMemo(() => new Set(favoriteItems.map((p) => p.id)), [favoriteItems]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(() => {
-    try { return localStorage.getItem("estate_session_id"); } catch { return null; }
-  });
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [chatKey, setChatKey] = useState(0);
   const [locationInput, setLocationInput] = useState("");
   const [typeDraft, setTypeDraft] = useState<Set<Property["propertyType"]>>(new Set());
@@ -96,12 +94,6 @@ function Index() {
     setPage(1);
   }, [filters]);
 
-  useEffect(() => {
-    try {
-      if (sessionId) localStorage.setItem("estate_session_id", sessionId);
-      else localStorage.removeItem("estate_session_id");
-    } catch {}
-  }, [sessionId]);
 
   // Session is auto-created server-side on first chat message and returned via SSE.
   const startNewChat = () => {

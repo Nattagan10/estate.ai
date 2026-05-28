@@ -47,13 +47,42 @@ function buildTypeKeywords(f: SearchFilters): string[] | null {
   return null;
 }
 
+// Maps BTS/landmark area names (used in UI/chat) → district_canonical values stored in DB
+const AREA_TO_CANONICAL: Record<string, string> = {
+  // Watthana district
+  "Asok": "Watthana", "Asoke": "Watthana", "Thonglor": "Watthana", "Phrom Phong": "Watthana",
+  "Ekkamai": "Watthana", "Nana": "Watthana", "Phloen Chit": "Watthana",
+  // Sathon district
+  "Sathorn": "Sathon",
+  // Bang Rak district
+  "Silom": "Bang Rak",
+  // Pathum Wan district
+  "Siam": "Pathum Wan", "Chidlom": "Pathum Wan", "Ratchadamri": "Pathum Wan",
+  // Phra Khanong district
+  "On Nut": "Phra Khanong", "Udom Suk": "Phra Khanong", "Bearing": "Phra Khanong", "Samrong": "Phra Khanong",
+  // Huai Khwang district
+  "Ratchada": "Huai Khwang", "Rama 9": "Huai Khwang", "Thailand Cultural Centre": "Huai Khwang", "Sutthisan": "Huai Khwang",
+  // Phaya Thai district
+  "Ari": "Phaya Thai", "Saphan Khwai": "Phaya Thai", "Victory Monument": "Phaya Thai", "Ratchathewi": "Phaya Thai", "Phaya Thai": "Phaya Thai",
+  // Chatuchak district
+  "Mo Chit": "Chatuchak", "Chatuchak": "Chatuchak",
+  // Others
+  "Bang Sue": "Bang Sue", "Lat Phrao": "Lat Phrao", "Bang Na": "Bang Na",
+  "Phra Khanong": "Phra Khanong", "Huai Khwang": "Huai Khwang",
+};
+
+function resolveArea(area: string | undefined): string | undefined {
+  if (!area) return undefined;
+  return AREA_TO_CANONICAL[area] ?? area;
+}
+
 export async function searchPropertiesServer(
   filters: SearchFilters,
 ): Promise<{ properties: Property[]; total: number }> {
   const f = FiltersSchema.parse(filters ?? {});
 
   const { data, error } = await (supabaseAdmin as any).rpc("rpc_search_properties", {
-    p_area:           f.area ?? null,
+    p_area:           resolveArea(f.area) ?? null,
     p_property_types: buildTypeKeywords(f),
     p_min_price:      f.minPrice ?? null,
     p_max_price:      f.maxPrice ?? null,
@@ -88,7 +117,7 @@ export const fetchMapPins = createServerFn({ method: "POST" })
     const f = FiltersSchema.parse(data ?? {});
 
     const { data: result, error } = await (supabaseAdmin as any).rpc("rpc_fetch_map_pins", {
-      p_area:           f.area ?? null,
+      p_area:           resolveArea(f.area) ?? null,
       p_property_types: buildTypeKeywords(f),
       p_min_price:      f.minPrice ?? null,
       p_max_price:      f.maxPrice ?? null,

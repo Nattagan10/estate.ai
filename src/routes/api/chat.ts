@@ -787,6 +787,27 @@ If nothing found, return {}.`,
             }
           }
 
+          // 3.99 Enrich newFilters with accumulated questionnaire data
+          // This makes Results load progressively as the chat collects preferences,
+          // even during the questionnaire phase when no explicit filter keyword was typed.
+          if (!resetRequested) {
+            if (!newFilters.propertyType && currentQ.property_type) {
+              newFilters = { ...newFilters, propertyType: currentQ.property_type as SearchFilters["propertyType"] };
+            }
+            if (!newFilters.maxPrice && currentQ.budget && typeof currentQ.budget === "number") {
+              newFilters = { ...newFilters, maxPrice: currentQ.budget };
+            }
+            if (!newFilters.area && currentQ.location && typeof currentQ.location === "string") {
+              newFilters = { ...newFilters, area: currentQ.location };
+            }
+            if (!newFilters.nearTransit && currentQ.near_transit) {
+              newFilters = { ...newFilters, nearTransit: true };
+            }
+            if (currentQ.purpose === "investment" && !("hasYield" in newFilters)) {
+              newFilters = { ...newFilters, hasYield: true };
+            }
+          }
+
           // 4. Search properties — bot_reccomend (Python RAG) first, SQL fallback
           let didDropFilters = false;
           let nearbyFallback = false;
@@ -881,12 +902,11 @@ If nothing found, return {}.`,
 
           // Priority order for collecting missing fields — ask one at a time
           const fieldPriority: [string, string, any][] = [
-            ["customer_name", "ขอทราบชื่อของคุณลูกค้าด้วยนะคะ?", currentQ.customer_name],
-            ["purpose", "ซื้อไว้อยู่เองหรือลงทุนคะ?", currentQ.purpose],
-            ["property_type", "สนใจคอนโด บ้าน หรือทาวน์เฮ้าส์คะ?", currentQ.property_type],
-            ["payment_type", "ต้องการซื้อหรือเช่าคะ?", currentQ.payment_type],
             ["location", "ต้องการทำเลแถวไหนคะ?", currentQ.location],
             ["budget", "งบประมาณอยู่ที่เท่าไหร่คะ?", currentQ.budget],
+            ["purpose", "ซื้อไว้อยู่เองหรือลงทุนคะ?", currentQ.purpose],
+            ["payment_type", "ต้องการซื้อหรือเช่าคะ?", currentQ.payment_type],
+            ["customer_name", "ขอทราบชื่อของคุณลูกค้าด้วยนะคะ?", currentQ.customer_name],
             ["age", "ขอทราบอายุของคุณลูกค้าด้วยนะคะ?", currentQ.age],
             ["phone", "ขอเบอร์โทรศัพท์เพื่อให้ทีมงานติดต่อกลับได้เลยคะ?", currentQ.phone],
           ];
@@ -894,23 +914,36 @@ If nothing found, return {}.`,
           const nextQuestion = nextMissingField ? nextMissingField[1] : null;
 
           const missingPrompt = nextQuestion
-            ? `หลังจากตอบเรื่อง property แล้ว ให้ถามคำถามนี้ 1 ข้อเท่านั้น (ห้ามถามหลายข้อพร้อมกัน): "${nextQuestion}"`
-            : `ได้ข้อมูลครบแล้ว เน้นแนะนำ property และนัดดูห้องค่ะ`;
+            ? `ถามคำถามนี้เท่านั้น 1 ประโยคสั้น ๆ ห้ามถามหลายข้อ ห้ามแสดง list: "${nextQuestion}"`
+            : `ได้ข้อมูลครบแล้ว เน้นแนะนำ property สั้น ๆ`;
 
-          const SYSTEM_PROMPT = `คุณคือ Estate AI ที่ปรึกษาอสังหาริมทรัพย์ในกรุงเทพฯ มืออาชีพ${distanceAnswerNote}
-ลักษณะการพูด: ใช้ "ค่ะ" ทุกครั้ง สุภาพ อบอุ่น กระชับ เป็นธรรมชาติ
-ตอบสั้น ๆ ได้ใจความ ไม่พูดยืดยาว ไม่ใช้ bullet point ซ้อนกันหลายชั้น ห้ามใช้ emoji ทุกชนิดในทุกคำตอบ
-ตรวจจับภาษาของผู้ใช้แล้วตอบเป็นภาษาเดียวกันเสมอ (ไทย อังกฤษ จีน ญี่ปุ่น) หากภาษาอื่นให้ใช้ "ka" แทน "ค่ะ"
+          const SYSTEM_PROMPT = `คุณคือ Estate AI ที่ปรึกษาอสังหาริมทรัพย์ในกรุงเทพฯ${distanceAnswerNote}
+
+== กฎห้ามฝ่าฝืน ==
+- ห้ามใช้ emoji ทุกชนิดเด็ดขาด: ห้าม 😊 🏠 🏢 📍 💰 🚇 🛏 ✅ ❌ และอื่น ๆ ทั้งหมด
+- ห้ามแสดง bullet list หรือ numbered list
+- ห้ามถามมากกว่า 1 คำถามต่อ turn
+- ห้าม recap หรือสรุปข้อมูลที่ลูกค้าเพิ่งบอก
+- ตอบสั้น: ถ้าถามคำถาม ถามแค่ 1 ประโยค ถ้าแนะนำ property ได้ไม่เกิน 4 บรรทัด
+- ใช้ "ค่ะ" ลงท้าย สุภาพ ธรรมชาติ
+
+ตัวอย่างที่ถูก: "ยินดีช่วยค้นหาค่ะ สนใจประเภทไหนคะ"
+ตัวอย่างที่ผิด: "ยินดีต้อนรับ 😊 ช่วยบอกสิ่งเหล่านี้ได้เลยครับ: 📍ทำเล 💰งบ 🏢ประเภท"
 ${filterNote}
 
 ${missingPrompt}
 
-รายการ property ที่พบในระบบ (${total} รายการ, วิธีค้นหา: ${searchMode === "sql" ? "keyword filter" : searchMode === "location" ? "geocoding+distance" : "semantic search"}${geocodedPlaceName ? `, จุดอ้างอิง: ${geocodedPlaceName}` : newFilters.lat ? `, anchor: ${newFilters.lat?.toFixed(4)},${newFilters.lng?.toFixed(4)}` : ""}):
-${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเภท: ${p.propertyType}, ห้องนอน: ${p.bedrooms || "Studio"}, ราคา: ฿${p.price.toLocaleString()}${p.distance_m != null ? `, ระยะ: ${p.distance_m < 1000 ? p.distance_m + "m" : (p.distance_m / 1000).toFixed(1) + "km"}` : ""})`).join("\n")}
+property ในระบบ (${total} รายการ, mode: ${searchMode === "sql" ? "keyword" : searchMode === "location" ? "location" : "semantic"}${geocodedPlaceName ? `, ref: ${geocodedPlaceName}` : newFilters.lat ? `, anchor: ${newFilters.lat?.toFixed(4)},${newFilters.lng?.toFixed(4)}` : ""}):
+${properties.map((p) => `- ${p.name} | ${p.area_name} | ${p.propertyType} | ${p.bedrooms || "Studio"} bed | ฿${p.price.toLocaleString()}${p.distance_m != null ? ` | ${p.distance_m < 1000 ? p.distance_m + "m" : (p.distance_m / 1000).toFixed(1) + "km"}` : ""}`).join("\n")}
 
-ถ้ามี property: แนะนำไม่เกิน 3 รายการ บอกชื่อ ทำเล ห้องนอน ราคา${newFilters.lat ? ` และระยะทาง (ใช้คำว่า 'ห่าง X เมตร/กิโลเมตรจาก${geocodedPlaceName ?? "จุดที่คุณระบุ"}')` : ""} แล้วบอกเหตุผลสั้น ๆ 1 ประโยคว่าเหมาะกับลูกค้าอย่างไร
-ถ้าไม่มี property: แจ้งสั้น ๆ และแนะนำให้ปรับเงื่อนไข
+ถ้ามี property: แนะนำ 2-3 รายการ (ชื่อ, ทำเล, ราคา${newFilters.lat ? `, ระยะจาก${geocodedPlaceName ?? "จุดอ้างอิง"}` : ""}, เหตุผลสั้น ๆ) แล้วถามคำถามถัดไป 1 ข้อ
+ถ้าไม่มี property: แจ้ง 1 ประโยคสั้น ๆ แล้วถามคำถามถัดไป 1 ข้อ
 `;
+
+          // Strip all emoji from a text chunk — server-side guarantee regardless of LLM output
+          const stripEmoji = (t: string) =>
+            t.replace(/[\u{1F300}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA9F}]/gu, "")
+             .replace(/\s{2,}/g, " ");  // collapse double spaces left by removed emoji
 
           // 6. Return standard SSE Stream
           const filtersEvent = `event: filters\ndata: ${JSON.stringify({ filters: newFilters, total, sessionId: activeSessionId })}\n\n`;
@@ -932,7 +965,7 @@ ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเ
                   // Stream in chunks of ~80 chars so the UI feels live
                   const CHUNK = 80;
                   for (let i = 0; i < ragAnswer.length; i += CHUNK) {
-                    const chunk = ragAnswer.slice(i, i + CHUNK);
+                    const chunk = stripEmoji(ragAnswer.slice(i, i + CHUNK));
                     const textEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`;
                     controller.enqueue(enc.encode(textEvent));
                   }
@@ -968,7 +1001,7 @@ ${properties.map((p) => `- ${p.name} (ทำเล: ${p.area_name}, ประเ
                       event.type === "content_block_delta" &&
                       event.delta.type === "text_delta"
                     ) {
-                      const text = event.delta.text;
+                      const text = stripEmoji(event.delta.text);
                       fullResponse += text;
                       const textEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
                       controller.enqueue(enc.encode(textEvent));
