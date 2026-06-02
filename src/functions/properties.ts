@@ -134,7 +134,7 @@ export const fetchMapPins = createServerFn({ method: "POST" })
   });
 
 export const getAreaList = createServerFn({ method: "GET" }).handler(async () => {
-  const { data, error } = await (supabaseAdmin as any)
+  const { data, error } = await supabaseAdmin
     .from("rag_properties")
     .select("district")
     .not("district", "is", null)
@@ -184,7 +184,7 @@ export const adminListProperties = createServerFn({ method: "POST" })
   .inputValidator((d: { search?: string; limit?: number }) => d ?? {})
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId);
-    let q = (supabaseAdmin as any)
+    let q = supabaseAdmin
       .from("rag_properties")
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false });
@@ -201,11 +201,11 @@ export const adminUpsertProperty = createServerFn({ method: "POST" })
     await assertAdmin(context.userId);
     const payload = { ...data, id: data.id ?? `MANUAL-${Date.now()}` };
     if (data.id) {
-      const { error } = await (supabaseAdmin as any).from("rag_properties").update(payload).eq("id", data.id);
+      const { error } = await supabaseAdmin.from("rag_properties").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
       return { id: data.id };
     }
-    const { data: ins, error } = await (supabaseAdmin as any)
+    const { data: ins, error } = await supabaseAdmin
       .from("rag_properties")
       .insert(payload)
       .select("id")
@@ -219,7 +219,7 @@ export const adminDeleteProperty = createServerFn({ method: "POST" })
   .inputValidator((d: { id: string }) => z.object({ id: z.string() }).parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.userId);
-    const { error } = await (supabaseAdmin as any).from("rag_properties").delete().eq("id", data.id);
+    const { error } = await supabaseAdmin.from("rag_properties").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -229,7 +229,7 @@ export const adminGetAnalytics = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertAdmin(context.userId);
     const [props, sessions, logs] = await Promise.all([
-      (supabaseAdmin as any)
+      supabaseAdmin
         .from("rag_properties")
         .select("district, property_type, price_thb"),
       supabaseAdmin

@@ -94,7 +94,7 @@ export const adminListProperties = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     assertToken(data.token);
-    let q = (supabaseAdmin as any)
+    let q = supabaseAdmin
       .from("rag_properties")
       .select("id, name, property_type, district, neighborhood, developer, price_thb, near_transit, url, latitude, longitude, created_at", { count: "exact" })
       .order("created_at", { ascending: false });
@@ -113,11 +113,11 @@ export const adminUpsertProperty = createServerFn({ method: "POST" })
     const prop = data.property;
     const payload = { ...prop, id: prop.id ?? `MANUAL-${Date.now()}` };
     if (prop.id) {
-      const { error } = await (supabaseAdmin as any).from("rag_properties").update(payload).eq("id", prop.id);
+      const { error } = await supabaseAdmin.from("rag_properties").update(payload).eq("id", prop.id);
       if (error) throw new Error(error.message);
       return { id: prop.id };
     }
-    const { data: ins, error } = await (supabaseAdmin as any)
+    const { data: ins, error } = await supabaseAdmin
       .from("rag_properties")
       .insert(payload)
       .select("id")
@@ -132,7 +132,7 @@ export const adminDeleteProperty = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     assertToken(data.token);
-    const { error } = await (supabaseAdmin as any).from("rag_properties").delete().eq("id", data.id);
+    const { error } = await supabaseAdmin.from("rag_properties").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -143,7 +143,7 @@ export const adminGetApiLogs = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     assertToken(data.token);
-    const { data: rows, error } = await (supabaseAdmin as any)
+    const { data: rows, error } = await supabaseAdmin
       .from("api_request_logs")
       .select("*")
       .order("created_at", { ascending: false })
