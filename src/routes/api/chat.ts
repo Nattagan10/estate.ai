@@ -1077,7 +1077,7 @@ ${properties.map((p) => `- ${p.name} | ${p.area_name} | ${p.propertyType} | ${p.
 
               // Log detailed API request/response for admin monitoring
               try {
-                await supabaseAdmin.from("api_request_logs").insert({
+                await (supabaseAdmin as any).from("api_request_logs").insert({
                   session_id: activeSessionId ?? null,
                   user_message: userText,
                   detected_lang: detectedLang,
@@ -1107,7 +1107,7 @@ ${properties.map((p) => `- ${p.name} | ${p.area_name} | ${p.propertyType} | ${p.
           console.error("Local chat handler error", e);
           // Log error to api_request_logs
           try {
-            await supabaseAdmin.from("api_request_logs").insert({
+            await (supabaseAdmin as any).from("api_request_logs").insert({
               error: e instanceof Error ? e.message : String(e),
               duration_ms: Date.now() - _reqStart,
             });
