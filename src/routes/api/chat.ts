@@ -1,7 +1,8 @@
 ﻿import { createFileRoute } from "@tanstack/react-router";
 import { searchPropertiesServer, type SearchFilters } from "@/functions/properties";
 import { rowToProperty, type DbPropertyRow, type Property } from "@/shared/data/properties";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { supabaseAdmin as _supabaseAdmin } from "@/integrations/supabase/client.server";
+const supabaseAdmin = _supabaseAdmin as any;
 import Anthropic from "@anthropic-ai/sdk";
 
 // ─── BTS / MRT / Landmark coordinate lookup ──────────────────────────────────
