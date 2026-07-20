@@ -1,6 +1,7 @@
 ﻿import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { supabaseAdmin as _supabaseAdmin } from "@/integrations/supabase/client.server";
+const supabaseAdmin = _supabaseAdmin as any;
 
 // Demo-only hardcoded admin token. Not for production.
 const ADMIN_TOKEN = "1111";
